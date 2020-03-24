@@ -1,6 +1,9 @@
 # geo_to_hca
 Tools to assist in the automatic conversion of geo metadata to hca metadata standard.
 
+# Running apps/geo_to_hca.py (Version 1)
+This script takes as input an empty template HCA spreadsheet and a tab-delimited text file listing multiple GEO accessions in the form: GSEnnnnnn. Currently, the script throws errors when given certain GEO accessions as it cannot find an associated SRA study accession to work with; this is something we are in the process of fixing. If you would like to retrieve HCA metadata for a given list of GEO accessions, it is possible to run the script after removing the accessions which are causing the errors. Version 2 is in progress!
+
 # Issues which need addressing:
 
 Issue: implement a function for merging of metadata from multiple GEO accessions associated with 1
