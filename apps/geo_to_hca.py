@@ -4,13 +4,10 @@ import requests as rq
 import pandas as pd
 import xml.etree.ElementTree as xm
 import xml.dom.minidom
-import asn1tools
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl import load_workbook
-import json
-import ast
 
 class SraUtils:
 
