@@ -1,0 +1,6 @@
+requests
+pysradb
+pandas
+openpyxl
+asn1tools
+pyyaml
