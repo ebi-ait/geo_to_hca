@@ -586,7 +586,7 @@ def get_superseries_from_gse(geo_accession: str) -> str:
 def main():
 
     # read a list of geo accessions from a file
-    geo_accession_list = pd.read_csv("docs/geo_accessions.txt", sep="\t")
+    geo_accession_list = pd.read_csv("docs/geo_accessions-full.txt", sep="\t")
 
     # initialise dictionary to summarise results
     results = {}
