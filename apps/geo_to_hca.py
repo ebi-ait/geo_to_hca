@@ -170,16 +170,30 @@ def fetch_bioproject(bioproject_accession: str):
 def fetch_pubmed(project_pubmed_id: str):
     xml_content = SraUtils.pubmed_id(project_pubmed_id)
     author_list = list()
-    grant_list=  list()
-    title = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("ArticleTitle").text
-    for author in xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("AuthorList"):
-        author_list.append([author.find("LastName").text,author.find("ForeName").text,author.find("Initials").text,
-                            author.find('AffiliationInfo').find("Affiliation").text])
-    for grant in xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("GrantList"):
-        grant_list.append([grant.find("GrantID").text,grant.find("Agency").text])
-    for article_id in xml_content.find('PubmedArticle').find('PubmedData').find('ArticleIdList'):
-        if "/" in article_id.text:
-            article_doi_id = article_id.text
+    grant_list = list()
+    article = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article")
+    # Retrieve all the children for article
+    article_children = [children.tag for children in list(article)]
+    title = article.find("ArticleTitle").text
+
+    article_doi_id = ''
+
+    # Sanity checks for existence of elements in the article (find method returns NoneType)
+    if 'AuthorList' in article_children:
+        for author in xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("AuthorList"):
+            author_list.append([author.find("LastName").text,author.find("ForeName").text,author.find("Initials").text,
+                                author.find('AffiliationInfo').find("Affiliation").text])
+
+    if 'GrantList' in article_children:
+        for grant in article.find("GrantList"):
+            if all([property in list(grant) for property in ['GrantID', 'Agency']]):
+                grant_list.append([grant.find("GrantID").text,grant.find("Agency").text])
+
+    if 'ArticleIdList' in article_children:
+        for article_id in article.find('ArticleIdList'):
+            if "/" in article_id.text:
+                article_doi_id = article_id.text
+
     return title,author_list,grant_list,article_doi_id
 
 def parse_xml(xml_content):
@@ -223,6 +237,7 @@ def get_process_id(row,process_id,cell_suspension):
         process_id = 'process_' + str(count)
     return process_id
 
+
 def get_lane_index(row,cell_suspension,run,lane_index):
     if row['Experiment'] == cell_suspension and row['Run'] == run:
         lane_index = lane_index
@@ -231,6 +246,7 @@ def get_lane_index(row,cell_suspension,run,lane_index):
     elif row['Experiment'] != cell_suspension:
         lane_index = 1
     return lane_index
+
 
 def get_row(row,file_index,process_id,lane_index,fastq_map):
     new_row = row
@@ -248,6 +264,7 @@ def get_row(row,file_index,process_id,lane_index,fastq_map):
     new_row['lane_index'] = lane_index
     return new_row
 
+
 def integrate_metadata(srp_metadata,fastq_map):
     SRP_df = pd.DataFrame()
     count,cell_suspension,run,lane_index,process_id = initialise(srp_metadata)
@@ -261,6 +278,7 @@ def integrate_metadata(srp_metadata,fastq_map):
         new_row = get_row(row,'read3PairFiles',process_id,lane_index,fastq_map)
         SRP_df = SRP_df.append(new_row, ignore_index=True)
     return SRP_df
+
 
 def get_empty_df(workbook,tab_name):
     sheet = workbook[tab_name]
@@ -300,6 +318,7 @@ def write_to_wb(workbook: Workbook, tab_name: str, tab_content: pd.DataFrame) ->
         for i in range(len(tab_content[key.value])):
             worksheet[f"{get_column_letter(index + 1)}{i + row_not_filled}"] = list(tab_content[key.value])[i]
 
+
 def get_sequence_file_tab_xls(SRP_df,workbook,tab_name):
     tab = get_empty_df(workbook,tab_name)
     for index,row in SRP_df.iterrows():
@@ -316,6 +335,7 @@ def get_sequence_file_tab_xls(SRP_df,workbook,tab_name):
                           'process.process_core.process_id':row['process_id']}, ignore_index=True)
     return tab
 
+
 def get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name):
     tab = get_empty_df(workbook, tab_name)
     experiments_dedup = list(set(list(SRP_df['Experiment'])))
@@ -327,6 +347,7 @@ def get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name):
                          'cell_suspension.genus_species.text':list(SRP_df.loc[SRP_df['Experiment'] == experiment]['ScientificName'])[0],
                          'cell_suspension.biomaterial_core.biosamples_accession':biosample}, ignore_index=True)
     write_to_wb(workbook, tab_name, tab)
+
 
 def get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name):
     tab = get_empty_df(workbook, tab_name)
@@ -344,11 +365,11 @@ def get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name):
                           'collection_protocol.protocol_core.protocol_id':''}, ignore_index=True)
     write_to_wb(workbook, tab_name, tab)
 
+
 def get_library_protocol_tab_xls(SRP_df,workbook,out_file,tab_name):
     tab = get_empty_df(workbook, tab_name)
     experiments_dedup = list(set(list(SRP_df['Experiment'])))
     count = 0
-    library_protocol_id = "library_protocol_1"
     library_protocol_set = list()
     library_protocol_dict = {}
     for experiment in experiments_dedup:
@@ -440,6 +461,7 @@ def update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequenc
     sequence_file_tab['library_preparation_protocol.protocol_core.protocol_id'] = library_protocol_id_list
     sequence_file_tab['sequencing_protocol.protocol_core.protocol_id'] = sequencing_protocol_id_list
     write_to_wb(workbook, tab_name, sequence_file_tab)
+
 
 def get_project_main_tab_xls(SRP_df,workbook,geo_accession,out_file,tab_name):
     tab = get_empty_df(workbook,tab_name)
@@ -542,22 +564,22 @@ def return_gse_from_superseries(geo_accession: str) -> str:
 
 def get_superseries_from_gse(geo_accession: str) -> str:
     sys.stdout = open(os.devnull, "w")
-    superseries = [geo_accession]
+    superseries = geo_accession
     try:
         gds = SRAweb().fetch_gds_results(geo_accession)
         unique_gse = list(set(list(gds['gse'])))
         for gse in unique_gse:
             if ";" in gse:
-                superseries = [gse.split(';')[1]]
+                superseries = [f"GSE{gse.split(';')[1]}"]
     except SystemExit:
         pass
     sys.stdout = sys.__stdout__
-    return str(superseries)
+    return superseries
 
 def main():
 
     # read a list of geo accessions from a file
-    geo_accession_list = pd.read_csv("docs/geo_accessions.txt",sep="\t")
+    geo_accession_list = pd.read_csv("docs/geo_accessions.txt", sep="\t")
 
     # for each geo accession:
     for geo_accession in list(geo_accession_list["geo_accession"]):
@@ -573,24 +595,15 @@ def main():
             geo_accession = get_superseries_from_gse(geo_accession.split(',')[0])
 
         geo_accession = return_gse_from_superseries(geo_accession)
+        superseries = geo_accession if isinstance(geo_accession, str) else geo_accession[0]
         if ';' in geo_accession:
             gse_list = geo_accession.split(',')
             superseries = gse_list[0].split(';')[1]
             geo_accession = [gse.split(';')[0] for gse in gse_list]
-            """
-            print(f'A Superseries accession was introduced: GSE{superseries}, with accessions:\n'
-                  f'{",".join([gse.split(";")[0] for gse in gse_list])}')
-            continue
-            """
-        """
-        if ',' in geo_accession:
-            print(f'Found more than 1 accession: {geo_accession}')
-            # for now skip this geo accession and move to next accession in the file.
-            continue
-        """
+
 
         # create a new output file name to store the hca converted metadata
-        out_file = "spreadsheets/%s.xlsx" % (geo_accession)
+        out_file = "spreadsheets/%s.xlsx" % (superseries)
 
         # load an empty template HCA metadata excel spreadsheet. All tabs and fields should be in this template.
         workbook = load_workbook(filename="docs/hca_template.xlsx")
@@ -599,6 +612,7 @@ def main():
             geo_accession = [geo_accession]
 
         for accession in geo_accession:
+            print(accession)
             ########################################################################################################
             # Ticket created: create a new hca_template which is compatible with ingest row number requirements;
             # update all functions to account for the modified template format.
