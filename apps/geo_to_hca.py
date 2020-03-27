@@ -239,7 +239,7 @@ def extract_read_information(general_read_values):
     return reads
 
 
-def retrieve_fastq_from_experiment(fastq_map, experiment_package):
+def retrieve_fastq_from_experiment(fastq_map,experiment_package, content):
     for run_set in experiment_package.findall('RUN_SET'):
         for run in run_set.findall('RUN'):
             run_attributes = run.findall('RUN_ATTRIBUTES')
