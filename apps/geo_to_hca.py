@@ -643,14 +643,13 @@ def get_superseries_from_gse(geo_accession: str) -> str:
 def main():
 
     # read a list of geo accessions from a file
-    geo_accession_list = pd.read_csv("docs/geo_accessions.txt", sep="\t")
+    geo_accession_list = pd.read_csv("docs/geo_accessions-full.txt", sep="\t")
 
     # initialise dictionary to summarise results
     results = {}
 
     # For each line of geo accessions:
     for geo_accession in list(geo_accession_list["geo_accession"]):
-
         # Deal with superseries and more than one accession in a line
         if ',' in geo_accession:
             geo_accession = get_superseries_from_gse(geo_accession.split(',')[0])
@@ -672,13 +671,10 @@ def main():
             geo_accession = [geo_accession]
 
         for accession in geo_accession:
-            print(f"processing GEO dataset {accession}")
             ########################################################################################################
             # Ticket created: create a new hca_template which is compatible with ingest row number requirements;   #
             # update all functions to account for the modified template format.                                    #
             ########################################################################################################
-
-            srp_metadata = fetch_srp_metadata(srp_accession)
 
             # fetch the SRA study accession given the geo accession
             try:
@@ -686,6 +682,7 @@ def main():
             # Deal with sraweb package doing a sys.exit(1) if it doesn't find the accession
             except SystemExit:
                 continue
+            srp_metadata = fetch_srp_metadata(srp_accession)
             #########################################################################################################
             # Ticket created: investigate and add function to deal with cases where "No results found for GSEnnnnnn"#
             # is returned and the script is exited.                                                                 #
