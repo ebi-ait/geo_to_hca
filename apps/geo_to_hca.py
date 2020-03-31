@@ -10,6 +10,8 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils.cell import get_column_letter
 from openpyxl import load_workbook
 import os,sys
+import wget
+import glob
 
 OPTIONAL_TABS = ['Imaged specimen', 'Organoid', 'Cell line', 'Image file', 'Additional reagents',
                  'Familial relationship']
@@ -64,9 +66,9 @@ class SraUtils:
         srr_metadata_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}')
         if srr_metadata_url.status_code == 400:
             raise NotFoundSRA(srr_metadata_url, srr_accessions)
-        dom = xml.dom.minidom.parseString(srr_metadata_url.content)
-        pretty_xml_as_string = dom.toprettyxml()
-        print(pretty_xml_as_string)
+        #dom = xml.dom.minidom.parseString(srr_metadata_url.content)
+        #pretty_xml_as_string = dom.toprettyxml()
+        #print(pretty_xml_as_string)
         return xm.fromstring(srr_metadata_url.content),srr_metadata_url.content
 
     @staticmethod
@@ -118,18 +120,42 @@ def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     srp_metadata_df = SraUtils.srp_metadata(srp_accession)
     return srp_metadata_df
 
-
-def fetch_fastq_names(srr_accessions):
+def fetch_fastq_names(srr_accessions,srp_metadata):
     xml_content,content = SraUtils.srr_fastq(srr_accessions)
     fastq_map = {}
     for experiment_package in parse_xml(xml_content):
         fastq_map = retrieve_fastq_from_experiment(fastq_map,experiment_package)
-    if len(fastq_map) == 0:
-        result = "fastq not found"
-    else:
-        result = "fastq found"
-    return fastq_map,result
+    if not fastq_map:
+        print("no fastq found: downloading SRA object and converting to fastq")
+        fastq_map = convert_sra(srp_metadata)
+    return fastq_map
 
+def convert_sra(srp_metadata):
+    fastq_map = {}
+    for i in range(0,len(list(srp_metadata['Run']))):
+        download_path = list(srp_metadata['download_path'])[i]
+        cmd = "fastq-dump -I --split-files %s" % (download_path)
+        print(cmd)
+        os.system(cmd)
+        fastq_names = glob.glob("*.fastq")
+        if fastq_names:
+            print(fastq_names)
+            for file_name in fastq_names:
+                read1PairFiles = ''
+                read2PairFiles = ''
+                read3PairFiles = ''
+                if "R1" in file_name or "_1" in file_name:
+                    read1PairFiles = file_name
+                    print(read1PairFiles)
+                if "R2" in file_name or "_2" in file_name:
+                    read2PairFiles = file_name
+                    print(read2PairFiles)
+                if "I1" in file_name or "_3" in file_name:
+                    read3PairFiles = file_name
+            fastq_map[list(srp_metadata['Run'])[i]] = {"read1PairFiles":read1PairFiles,"read2PairFiles":read2PairFiles,"read3PairFiles":read3PairFiles}
+            for file_name in fastq_names:
+                os.remove(file_name)
+    return fastq_map
 
 def fetch_biosample(biosample_accession: str):
     xml_content = SraUtils.srr_biosample(biosample_accession)
@@ -207,8 +233,8 @@ def parse_xml(xml_content):
 
 def extract_read_information(general_read_values):
     reads = {}
-    if "--read1PairFiles" not in general_read_values or "--read2PairFiles" not in general_read_values:
-        reads = None
+    if "--read1PairFiles" not in general_read_values or "--read2PairFiles" not in general_read_values or "--read3PairFiles" not in general_read_values:
+        return None
     else:
         read_info_list = general_read_values.strip().split('--')[1:]
         for read_info in read_info_list:
@@ -219,13 +245,20 @@ def extract_read_information(general_read_values):
 
 
 def retrieve_fastq_from_experiment(fastq_map,experiment_package):
-    for run_set in experiment_package.findall('RUN_SET'):
-        for run in run_set.findall('RUN'):
-            run_attributes = run.findall('RUN_ATTRIBUTES')
-            for run_attribute in run_attributes:
-                for attributes in run_attribute.findall('RUN_ATTRIBUTE'):  # More than one attribute and they all have the same tag
-                    if attributes.find('TAG').text == 'options':
-                        fastq_map[run.attrib['accession']] = extract_read_information(attributes.find('VALUE').text)
+    def get_reads(fastq_map,experiment_package):
+        for run_set in experiment_package.findall('RUN_SET'):
+            for run in run_set.findall('RUN'):
+                run_attributes = run.findall('RUN_ATTRIBUTES')
+                for run_attribute in run_attributes:
+                    for attributes in run_attribute.findall('RUN_ATTRIBUTE'):  # More than one attribute and they all have the same tag
+                        if attributes.find('TAG').text == 'options':
+                            reads = extract_read_information(attributes.find('VALUE').text)
+                            if reads:
+                                fastq_map[run.attrib['accession']] = reads
+                            else:
+                                return {}
+        return fastq_map
+    fastq_map = get_reads(fastq_map,experiment_package)
     return fastq_map
 
 
@@ -650,51 +683,54 @@ def main():
                 srp_metadata = fetch_srp_metadata(srp_accession)
 
                 # get fastq file names
-                fastq_map,result = fetch_fastq_names(list(srp_metadata['Run']))
-                if result == "fastq not found":
-                    results[accession].update({"fastq files available": "no"})
-                    print("no fastq found")
-                    #srp_metadata.to_csv("results/%s_DataFrame.txt" % (accession), sep="\t")
-                    continue
-                else:
+                fastq_map = fetch_fastq_names(list(srp_metadata['Run']),srp_metadata)
+
+                # store whether the fastq files were available
+
+                if fastq_map:
+
                     results[accession].update({"fastq files available": "yes"})
 
-                    # integrate metadata and fastq file names into a single dataframe
-                    SRP_df = integrate_metadata(srp_metadata, fastq_map)
-                    #SRP_df.to_csv("results/%s_DataFrame.txt" % (accession),sep="\t")
+                if not fastq_map:
 
-                    # get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions
-                    sequence_file_tab = get_sequence_file_tab_xls(SRP_df, workbook, tab_name="Sequence file")
+                    results[accession].update({"fastq files available": "no"})
+                    continue
 
-                    # get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_cell_suspension_tab_xls(SRP_df, workbook, out_file, tab_name="Cell suspension")
+                # integrate metadata and fastq file names into a single dataframe
+                SRP_df = integrate_metadata(srp_metadata, fastq_map)
 
-                    # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_specimen_from_organism_tab_xls(SRP_df, workbook, out_file, tab_name="Specimen from organism")
+                # get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions
+                sequence_file_tab = get_sequence_file_tab_xls(SRP_df, workbook, tab_name="Sequence file")
 
-                    # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                    library_protocol_dict = get_library_protocol_tab_xls(SRP_df, workbook, out_file,
-                                                                        tab_name="Library preparation protocol")
+                # get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions
+                get_cell_suspension_tab_xls(SRP_df, workbook, out_file, tab_name="Cell suspension")
 
-                    # get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                    sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df, workbook, out_file,
-                                                                            tab_name="Sequencing protocol")
+                # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
+                get_specimen_from_organism_tab_xls(SRP_df, workbook, out_file, tab_name="Specimen from organism")
 
-                    # update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids
-                    update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
-                                                workbook, out_file, tab_name="Sequence file")
+                # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
+                library_protocol_dict = get_library_protocol_tab_xls(SRP_df, workbook, out_file,
+                                                                    tab_name="Library preparation protocol")
 
-                    # get Project metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_main_tab_xls(SRP_df, workbook, accession, out_file, tab_name="Project")
+                # get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions
+                sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df, workbook, out_file,
+                                                                        tab_name="Sequencing protocol")
 
-                    # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_publication_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Publications")
+                # update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids
+                update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
+                                            workbook, out_file, tab_name="Sequence file")
 
-                    # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_contributors_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Contributors")
+                # get Project metadata: fetch as many fields as is possible using the above metadata accessions
+                get_project_main_tab_xls(SRP_df, workbook, accession, out_file, tab_name="Project")
 
-                    # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_funders_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Funders")
+                # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
+                get_project_publication_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Publications")
+
+                # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
+                get_project_contributors_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Contributors")
+
+                # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
+                get_project_funders_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Funders")
 
         # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
         delete_unused_worksheets(workbook)
