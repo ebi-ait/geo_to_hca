@@ -10,6 +10,11 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils.cell import get_column_letter
 from openpyxl import load_workbook
 import os,sys
+import wget
+import glob
+import re
+import math
+import argparse
 
 OPTIONAL_TABS = ['Imaged specimen', 'Organoid', 'Cell line', 'Image file', 'Additional reagents',
                  'Familial relationship']
@@ -39,7 +44,10 @@ class NotFoundSRA(Exception):
         return root.find('ERROR').text  # Return the string for the error returned by Efetch
 
     def __str__(self):
-        accession_string = '\n'.join(self.accessions)
+        if len(self.accessions) > 1:
+            accession_string = '\n'.join(self.accessions)
+        else:
+            accession_string = self.accessions
         return (f"\nStatus code of the request: {self.response.status_code}.\n"
                 f"Error as returned by SRA:\n{self.error}"
                 f"The provided accessions were:\n{accession_string}\n\n")
@@ -64,6 +72,9 @@ class SraUtils:
         srr_metadata_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}')
         if srr_metadata_url.status_code == 400:
             raise NotFoundSRA(srr_metadata_url, srr_accessions)
+        #dom = xml.dom.minidom.parseString(srr_metadata_url.content)
+        #pretty_xml_as_string = dom.toprettyxml()
+        #print(pretty_xml_as_string)
         return xm.fromstring(srr_metadata_url.content),srr_metadata_url.content
 
     @staticmethod
@@ -115,18 +126,36 @@ def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     srp_metadata_df = SraUtils.srp_metadata(srp_accession)
     return srp_metadata_df
 
+def alternative_fastq_ENA(srp_metadata, fastq_map):
+    run_accessions = list(srp_metadata['Run'])
 
-def fetch_fastq_names(srr_accessions):
+    for accession in run_accessions:
+        request_url= f'http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession={accession}&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes'
+        fastq_results = pd.read_csv(request_url, delimiter='\t')
+        fastq_map[accession] = {}
+        fastq_files = list(fastq_results['fastq_ftp'])[0].split(';')
+        for i in range(len(fastq_files)):
+            fastq_map[accession][f'read{i + 1}PairFiles'] = fastq_files[i].split('/')[-1]
+    return fastq_map
+
+
+def fetch_fastq_names(srr_accessions,srp_metadata):
     xml_content,content = SraUtils.srr_fastq(srr_accessions)
     fastq_map = {}
+    available = 'yes'
     for experiment_package in parse_xml(xml_content):
-        fastq_map = retrieve_fastq_from_experiment(fastq_map,experiment_package,content)
-    if len(fastq_map) == 0:
-        result = "fastq not found"
-    else:
-        result = "fastq found"
-    return fastq_map,result
+        fastq_map = retrieve_fastq_from_experiment(fastq_map, experiment_package)
+    if not fastq_map:
+        print("no fastq found: downloading SRA object and converting to fastq")
+        fastq_map = alternative_fastq_ENA(srp_metadata, fastq_map)
+        if not fastq_map:
+            available = None
+    return fastq_map, available
 
+def get_dummy_fastq_map(fastq_map,srr_accessions):
+    for accession in srr_accessions:
+        fastq_map[accession] = {"read1PairFiles":'',"read2PairFiles":'',"read3PairFiles":''}
+    return fastq_map
 
 def fetch_biosample(biosample_accession: str):
     xml_content = SraUtils.srr_biosample(biosample_accession)
@@ -146,7 +175,10 @@ def fetch_library_protocol(srr_accession: str):
         for experiment in experiment_package.find('EXPERIMENT'):
             library_descriptors = experiment.find('LIBRARY_DESCRIPTOR')
             if library_descriptors:
-                library_construction_protocol = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL').text
+                if library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL'):
+                    library_construction_protocol = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL').text
+                else:
+                    library_construction_protocol = ""
     return library_construction_protocol
 
 
@@ -204,22 +236,58 @@ def parse_xml(xml_content):
 
 def extract_read_information(general_read_values):
     reads = {}
-    read_info_list = general_read_values.strip().split('--')[1:]
-    for read_info in read_info_list:
-        read_info = read_info.strip()
-        split_read = read_info.split("=")
-        reads[split_read[0]] = split_read[1]
+    if "--read1PairFiles" not in general_read_values or "--read2PairFiles" not in general_read_values or "--read3PairFiles" not in general_read_values:
+        return None
+    else:
+        read_info_list = general_read_values.strip().split('--')[1:]
+        for read_info in read_info_list:
+            read_info = read_info.strip()
+            split_read = read_info.split("=")
+            reads[split_read[0]] = split_read[1]
     return reads
 
+def new_extract_read_information(sra_file_list, fastq_map):
+    i = 1
+    for read_info in sra_file_list:
+        for alternative in list(read_info):
+            if 'url' in alternative.attrib:
+                #Asumes there is an order R1, R2, I1, I2
+                filename = alternative.attrib['url'].split('/')[-1]
+                accession = alternative.attrib['url'].split('/')[-2]
+                if accession not in fastq_map:
+                    fastq_map[accession] = {}
+                fastq_map[accession][f'read{i}PairFiles'] = filename
+                i += 1
+                break
+    return fastq_map
 
-def retrieve_fastq_from_experiment(fastq_map,experiment_package,content):
-    for run_set in experiment_package.findall('RUN_SET'):
-        for run in run_set.findall('RUN'):
-            run_attributes = run.findall('RUN_ATTRIBUTES')
-            for run_attribute in run_attributes:
-                for attributes in run_attribute.findall('RUN_ATTRIBUTE'):  # More than one attribute and they all have the same tag
-                    if attributes.find('TAG').text == 'options':
-                        fastq_map[run.attrib['accession']] = extract_read_information(attributes.find('VALUE').text)
+def retrieve_fastq_from_experiment(fastq_map,experiment_package):
+    def get_reads(fastq_map,experiment_package):
+        for run_set in experiment_package.findall('RUN_SET'):
+            for run in run_set.findall('RUN'):
+                run_attributes = run.findall('SRAFiles')
+                for sra_files in run_attributes:
+                    run_reads = []
+                    for sra_file in sra_files.findall('SRAFile'):
+                        attributes = sra_file.attrib
+                        # Check files are public and not in SRA format
+                        if attributes['cluster'] == 'public' and not int(attributes['sratoolkit']):
+                            run_reads.append(sra_file)
+                    if run_reads:
+                        fastq_map = new_extract_read_information(run_reads, fastq_map)
+                    else:
+                        return {}
+                    """
+                    for attributes in sra_file.findall('RUN_ATTRIBUTE'):  # More than one attribute and they all have the same tag
+                        if attributes.find('TAG').text == 'options':
+                            reads = extract_read_information(attributes.find('VALUE').text)
+                            if reads:
+                                fastq_map[run.attrib['accession']] = reads
+                            else:
+                                return {}
+                    """
+        return fastq_map
+    fastq_map = get_reads(fastq_map,experiment_package)
     return fastq_map
 
 
@@ -252,35 +320,44 @@ def get_lane_index(row,cell_suspension,run,lane_index):
     return lane_index
 
 
-def get_row(row,file_index,process_id,lane_index,fastq_map):
+# TODO Changed this to not depend on fastq map name conventions
+def get_row(row, file_index, process_id, lane_index, fastq_map):
     new_row = row
     if not fastq_map:
         new_row['fastq_name'] = ''
     else:
-        new_row['fastq_name'] = fastq_map[row['Run']][file_index]
-    if "read1" in file_index:
-        new_row['fastq_file'] = "index1"
-    elif "read2" in file_index:
-        new_row['fastq_file'] = "read1"
-    elif "read3" in file_index:
-        new_row['fastq_file'] = "read2"
+        if fastq_map[row['Run']]:
+            new_row['fastq_name'] = fastq_map[row['Run']].get(file_index)
+        else:
+            new_row['fastq_name'] = ''
+        if "I1" in new_row['fastq_name'] or "R3" in new_row['fastq_name']:
+            new_row['fastq_file'] = "index1"
+        elif "R1" in new_row['fastq_name']:
+            new_row['fastq_file'] = "read1"
+        elif "R2" in new_row['fastq_name']:
+            new_row['fastq_file'] = "read2"
+        elif "R4" in new_row['fastq_name'] or "I2" in new_row['fastq_name']:
+            new_row['fastq_file'] = 'index2'
+
     new_row['process_id'] = process_id
     new_row['lane_index'] = lane_index
     return new_row
 
-
+# TODO add changelog for this function. Accounted lanes
 def integrate_metadata(srp_metadata,fastq_map):
     SRP_df = pd.DataFrame()
     count,cell_suspension,run,lane_index,process_id = initialise(srp_metadata)
     for index, row in srp_metadata.iterrows():
         process_id = get_process_id(row,process_id,cell_suspension)
-        lane_index = get_lane_index(row,cell_suspension,run,lane_index)
-        new_row = get_row(row,'read1PairFiles',process_id,lane_index,fastq_map)
-        SRP_df = SRP_df.append(new_row, ignore_index=True)
-        new_row = get_row(row,'read2PairFiles',process_id,lane_index,fastq_map)
-        SRP_df = SRP_df.append(new_row, ignore_index=True)
-        new_row = get_row(row,'read3PairFiles',process_id,lane_index,fastq_map)
-        SRP_df = SRP_df.append(new_row, ignore_index=True)
+        srr_accession = row['Run']
+        for i in range(len(fastq_map[srr_accession])):
+            if re.search('_L[0-9]{3}', "".join(fastq_map[srr_accession].values())):
+                filename = fastq_map[srr_accession][f'read{i + 1}PairFiles']
+                lane_index = int(re.findall('L[0-9]{3}', filename)[0][-1])
+            else:
+                lane_index = ""
+            new_row = get_row(row,f'read{(i + 1)}PairFiles',process_id,lane_index,fastq_map)
+            SRP_df = SRP_df.append(new_row, ignore_index=True)
     return SRP_df
 
 
@@ -469,18 +546,22 @@ def update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequenc
     write_to_wb(workbook, tab_name, sequence_file_tab)
 
 
+# TODO Actually fix error instead of avoiding it
 def get_project_main_tab_xls(SRP_df,workbook,geo_accession,out_file,tab_name):
-    tab = get_empty_df(workbook,tab_name)
-    bioproject = list(set(list(SRP_df['BioProject'])))
-    if len(bioproject) > 1:
-        print("more than 1 bioproject, check this")
-    else:
-        bioproject = bioproject[0]
-    project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
-    tab = tab.append({'project.project_core.project_title':project_title,
-                      'project.project_core.project_description':project_description,
-                      'project.geo_series_accessions':geo_accession}, ignore_index=True)
-    write_to_wb(workbook, tab_name, tab)
+    try:
+        tab = get_empty_df(workbook,tab_name)
+        bioproject = list(set(list(SRP_df['BioProject'])))
+        if len(bioproject) > 1:
+            print("more than 1 bioproject, check this")
+        else:
+            bioproject = bioproject[0]
+        project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
+        tab = tab.append({'project.project_core.project_title':project_title,
+                          'project.project_core.project_description':project_description,
+                          'project.geo_series_accessions':geo_accession}, ignore_index=True)
+        write_to_wb(workbook, tab_name, tab)
+    except AttributeError:
+        pass
 
 
 def get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name):
@@ -583,43 +664,92 @@ def get_superseries_from_gse(geo_accession: str) -> str:
     sys.stdout = sys.__stdout__
     return superseries
 
+def list_str(values):
+    if "," not in values:
+        raise argparse.ArgumentTypeError("Argument list not valid: comma separated list required")
+    return values.split(',')
+
+def check_file(path):
+    if not os.path.exists(path):
+        raise argparse.ArgumentTypeError("file %s does not exist" % (path))
+    try:
+        df = pd.read_csv(path, sep="\t")
+    except:
+        raise argparse.ArgumentTypeError("file %s is not a valid format" % (path))
+    try:
+        geo_accession_list = list(df["accession"])
+    except:
+        raise argparse.ArgumentTypeError("accession list column not found in file %s" % (path))
+    return geo_accession_list
+
 def main():
 
-    # read a list of geo accessions from a file
-    geo_accession_list = pd.read_csv("docs/geo_accessions.txt", sep="\t")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--accession',type=str,help='GEO accession (str)')
+    parser.add_argument('--accession_list',type=list_str,help='GEO accession list (comma separated)')
+    parser.add_argument('--input_file',type=check_file,help='optional path to tab-delimited input .txt file')
+    parser.add_argument('--template',default="docs/hca_template.xlsx",
+                        help='path to an HCA spreadsheet template (xlsx)')
+    parser.add_argument('--header_row',type=int,default=4,
+                        help='header row with HCA programmatic names')
+    parser.add_argument('--input_row1',type=int,default=6,
+                        help='HCA metadata input start row')
+    parser.add_argument('--output_dir',default='spreadsheets/',
+                        help='path to output directory; if it does not exist, the directory will be created')
+    parser.add_argument('--output_log',type=bool,default=True,
+                        help='True/False: should the output result log be created')
+
+    args = parser.parse_args()
+
+    # check user-specified arguments are valid
+
+    if args.input_file:
+        geo_accession_list = args.input_file
+    elif args.accession_list:
+        geo_accession_list = args.accession_list
+    elif args.accession:
+        geo_accession_list = [args.accession]
+    else:
+        print("GEO accession input is not specified")
+        sys.exit()
+
+    if not os.path.exists(args.template):
+        print("path to HCA template file not found; will revert to default: docs/hca_template.xlsx")
+        template = "docs/hca_template.xlsx"
+    try:
+        workbook = load_workbook(filename=args.template)
+        template = args.template
+    except:
+        print("specified HCA template file is not valid xlsx; will revert to default: docs/hca_template.xlsx")
+        template = "docs/hca_template.xlsx"
+
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
 
     # initialise dictionary to summarise results
     results = {}
 
     # for each geo accession:
-    for geo_accession in list(geo_accession_list["geo_accession"]):
+    for geo_accession in geo_accession_list:
 
         if ',' in geo_accession:
             geo_accession = get_superseries_from_gse(geo_accession.split(',')[0])
-
-        geo_accession = return_gse_from_superseries(geo_accession)
+            print(geo_accession)
+            geo_accession = return_gse_from_superseries(geo_accession)
+            print(geo_accession)
         superseries = geo_accession if isinstance(geo_accession, str) else geo_accession[0]
-        if ';' in geo_accession:
-            gse_list = geo_accession.split(',')
-            superseries = gse_list[0].split(';')[1]
-            geo_accession = [gse.split(';')[0] for gse in gse_list]
-
 
         # create a new output file name to store the hca converted metadata
-        out_file = f"spreadsheets/{superseries}.xlsx"
+        out_file = f"{args.output_dir}/{superseries}.xlsx"
 
         # load an empty template HCA metadata excel spreadsheet. All tabs and fields should be in this template.
-        workbook = load_workbook(filename="docs/hca_template.xlsx")
+        workbook = load_workbook(filename=template)
 
         if isinstance(geo_accession, str):
             geo_accession = [geo_accession]
 
         for accession in geo_accession:
             print(f"processing GEO dataset {accession}")
-            ########################################################################################################
-            # Ticket created: create a new hca_template which is compatible with ingest row number requirements;
-            # update all functions to account for the modified template format.
-            ########################################################################################################
 
             # fetch the SRA study accession given the geo accession
             try:
@@ -627,63 +757,71 @@ def main():
             # Deal with sraweb package doing a sys.exit(1) if it doesn't find the accession
             except SystemExit:
                 continue
-            ########################################################################################################
-            # Ticket created: investigate and add function to deal with cases where "No results found for GSEnnnnnn"
-            # is returned and the script is exited.
-            ########################################################################################################
 
             # if an empty dataframe is returned, skip this geo accession and move to next accession in the file.
             if srp_accession == "srp not found":
-                results[geo_accession] = {"SRA Study available": "no"}
-                results[geo_accession].update({"fastq files available": "na"})
+                results[accession] = {"SRA Study available": "no"}
+                results[accession].update({"fastq files available": "na"})
                 continue
-                ########################################################################################################
-                # Ticket created: investigate and add function to deal with cases where returned dataframe is empty.
-                ########################################################################################################
 
             else:
+                results[accession] = {"SRA Study available": "yes"}
 
-                results[geo_accession].update({"fastq files available": "yes"})
+                # if an srp study accession can be found, fetch the SRA study metadata for the srp accession
+                srp_metadata = fetch_srp_metadata(srp_accession)
+
+                # get fastq file names
+                fastq_map, available = fetch_fastq_names(list(srp_metadata['Run']),srp_metadata)
+
+                # store whether the fastq files were available
+
+                if available:
+
+                    results[accession].update({"fastq files available": "yes"})
+
+                if not available:
+
+                    results[accession].update({"fastq files available": "no"})
+
                 # integrate metadata and fastq file names into a single dataframe
-                SRP_df = integrate_metadata(srp_metadata, fastq_map)
+                SRP_df = integrate_metadata(srp_metadata,fastq_map)
 
                 # get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions
-                sequence_file_tab = get_sequence_file_tab_xls(SRP_df, workbook, tab_name="Sequence file")
+                sequence_file_tab = get_sequence_file_tab_xls(SRP_df,workbook,tab_name="Sequence file")
 
                 # get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions
-                get_cell_suspension_tab_xls(SRP_df, workbook, out_file, tab_name="Cell suspension")
+                get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name="Cell suspension")
 
                 # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
-                get_specimen_from_organism_tab_xls(SRP_df, workbook, out_file, tab_name="Specimen from organism")
+                get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name="Specimen from organism")
 
                 # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                library_protocol_dict = get_library_protocol_tab_xls(SRP_df, workbook, out_file,
-                                                                     tab_name="Library preparation protocol")
+                library_protocol_dict = get_library_protocol_tab_xls(SRP_df,workbook,out_file,
+                                                                    tab_name="Library preparation protocol")
 
                 # get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df, workbook, out_file,
-                                                                           tab_name="Sequencing protocol")
+                sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df,workbook,out_file,
+                                                                        tab_name="Sequencing protocol")
 
                 # update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids
-                update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
-                                             workbook, out_file, tab_name="Sequence file")
-                ########################################################################################################
-                # Ticket created: functionality not complete; library prep. protocol and sequencing protocol ids are currently
-                # stored as ''. Need to get correct id per experiment using library_protocol_dict and sequencing_protocol_dict.
-                ########################################################################################################
+                update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,
+                                            workbook, out_file, tab_name="Sequence file")
 
                 # get Project metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_main_tab_xls(SRP_df, workbook, geo_accession, out_file, tab_name="Project")
+                get_project_main_tab_xls(SRP_df,workbook,accession,out_file,tab_name="Project")
 
-                # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_publication_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Publications")
+                # TODO Actually fix the error instead of avoiding
+                try:
+                    # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Publications")
 
-                # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_contributors_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Contributors")
+                    # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_project_contributors_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Contributors")
 
-                # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_funders_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Funders")
-
+                    # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_project_funders_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Funders")
+                except AttributeError:
+                    print(f'Attribute error with GEO project {accession}')
         # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
         delete_unused_worksheets(workbook)
 
@@ -691,8 +829,11 @@ def main():
         workbook.save(out_file)
 
     results = pd.DataFrame.from_dict(results).transpose()
+    print("showing result")
     print(results)
-    results.to_csv("docs/results_geo_accessions-testing.txt", sep="\t")
+    if args.output_log:
+        results.to_csv(f"{args.output_dir}/results_{superseries}.log",sep="\t")
+    print("Done.")
 
 
 if __name__ == "__main__":
