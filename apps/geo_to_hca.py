@@ -42,7 +42,10 @@ class NotFoundSRA(Exception):
         return root.find('ERROR').text  # Return the string for the error returned by Efetch
 
     def __str__(self):
-        accession_string = '\n'.join(self.accessions)
+        if len(self.accessions) > 1:
+            accession_string = '\n'.join(self.accessions)
+        else:
+            accession_string = self.accessions
         return (f"\nStatus code of the request: {self.response.status_code}.\n"
                 f"Error as returned by SRA:\n{self.error}"
                 f"The provided accessions were:\n{accession_string}\n\n")
@@ -126,13 +129,16 @@ def fetch_fastq_names(srr_accessions,srp_metadata):
     fastq_map = {}
     for experiment_package in parse_xml(xml_content):
         fastq_map = retrieve_fastq_from_experiment(fastq_map,experiment_package)
+        available = "yes"
     if not fastq_map:
-        # temporary solution
+        # implement Enrique's new function here
+        # if still no fastq file names, create dummy fastq map
         print("no fastq file names found: creating dummy fastq map with empty strings")
         fastq_map = get_dummy_fastq_map(fastq_map,srr_accessions)
-        # possible solution: working function to download and convert SRA object to fastq files
+        available = None
+        # alternative possible solution: function to download and convert SRA object to fastq files
         # fastq_map = convert_sra(srp_metadata)
-    return fastq_map
+    return fastq_map,available
 
 def get_dummy_fastq_map(fastq_map,srr_accessions):
     for accession in srr_accessions:
@@ -656,17 +662,19 @@ def check_file(path):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--accession',type='str',help='GEO accession (str)')
+    parser.add_argument('--accession',type=str,help='GEO accession (str)')
     parser.add_argument('--accession_list',type=list_str,help='GEO accession list (comma separated)')
     parser.add_argument('--input_file',type=check_file,help='optional path to tab-delimited input .txt file')
-    parser.add_argument('template',default="docs/hca_template.xlsx",
+    parser.add_argument('--template',default="docs/hca_template.xlsx",
                         help='path to an HCA spreadsheet template (xlsx)')
     parser.add_argument('--header_row',type=int,default=4,
                         help='header row with HCA programmatic names')
     parser.add_argument('--input_row1',type=int,default=6,
                         help='HCA metadata input start row')
-    parser.add_argument('output_dir',default='spreadsheets/',
+    parser.add_argument('--output_dir',default='spreadsheets/',
                         help='path to output directory; if it does not exist, the directory will be created')
+    parser.add_argument('--output_log',type=bool,default=True,
+                        help='True/False: should the output result log be created')
 
     args = parser.parse_args()
 
@@ -674,13 +682,10 @@ def main():
 
     if args.input_file:
         geo_accession_list = args.input_file
-        print(accession_list)
     elif args.accession_list:
         geo_accession_list = args.accession_list
-        print(accession_list)
     elif args.accession:
-        geo_accession_list = [args.geo_accession]
-        print(geo_accession_list)
+        geo_accession_list = [args.accession]
     else:
         print("GEO accession input is not specified")
         sys.exit()
@@ -703,8 +708,6 @@ def main():
 
     # for each geo accession:
     for geo_accession in geo_accession_list:
-
-        print(geo_accession)
 
         if ',' in geo_accession:
             geo_accession = get_superseries_from_gse(geo_accession.split(',')[0])
@@ -745,15 +748,15 @@ def main():
                 srp_metadata = fetch_srp_metadata(srp_accession)
 
                 # get fastq file names
-                fastq_map = fetch_fastq_names(list(srp_metadata['Run']),srp_metadata)
+                fastq_map,available = fetch_fastq_names(list(srp_metadata['Run']),srp_metadata)
 
                 # store whether the fastq files were available
 
-                if fastq_map:
+                if available:
 
                     results[accession].update({"fastq files available": "yes"})
 
-                if not fastq_map:
+                if not available:
 
                     results[accession].update({"fastq files available": "no"})
 
@@ -800,8 +803,11 @@ def main():
         workbook.save(out_file)
 
     results = pd.DataFrame.from_dict(results).transpose()
+    print("showing result")
     print(results)
-    results.to_csv("results/results_geo_accessions.txt", sep="\t")
+    if args.output_log:
+        results.to_csv(f"{args.output_dir}/results_{superseries}.log",sep="\t")
+    print("Done.")
 
 
 if __name__ == "__main__":
