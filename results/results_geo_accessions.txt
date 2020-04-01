@@ -1,0 +1,4 @@
+	SRA Study available	fastq files available
+GSE102580	yes	yes
+GSE129605	yes	yes
+GSE130148	yes	yes

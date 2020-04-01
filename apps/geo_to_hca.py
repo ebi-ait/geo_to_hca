@@ -12,6 +12,8 @@ from openpyxl import load_workbook
 import os,sys
 import wget
 import glob
+import re
+import math
 
 OPTIONAL_TABS = ['Imaged specimen', 'Organoid', 'Cell line', 'Image file', 'Additional reagents',
                  'Familial relationship']
@@ -120,6 +122,22 @@ def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     srp_metadata_df = SraUtils.srp_metadata(srp_accession)
     return srp_metadata_df
 
+def alternative_fastq_ENA(srp_metadata, fastq_map):
+    run_accessions = list(srp_metadata['Run'])
+
+    for accession in run_accessions:
+        request_url= f'http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession={accession}&result=read_run&fields=run_accession,fastq_ftp,fastq_md5,fastq_bytes'
+        fastq_results = pd.read_csv(request_url, delimiter='\t')
+        fastq_map[accession] = {}
+        fastq_files = list(fastq_results['fastq_ftp'])[0].split(';')
+        for i in range(len(fastq_files)):
+            fastq_map[accession][f'read{i + 1}PairFiles'] = fastq_files[i].split('/')[-1]
+    return fastq_map
+
+
+
+
+
 def fetch_fastq_names(srr_accessions,srp_metadata):
     xml_content,content = SraUtils.srr_fastq(srr_accessions)
     fastq_map = {}
@@ -127,7 +145,7 @@ def fetch_fastq_names(srr_accessions,srp_metadata):
         fastq_map = retrieve_fastq_from_experiment(fastq_map,experiment_package)
     if not fastq_map:
         print("no fastq found: downloading SRA object and converting to fastq")
-        fastq_map = convert_sra(srp_metadata)
+        fastq_map = alternative_fastq_ENA(srp_metadata, fastq_map)
     return fastq_map
 
 def convert_sra(srp_metadata):
@@ -174,8 +192,11 @@ def fetch_library_protocol(srr_accession: str):
     for experiment_package in parse_xml(xml_content):
         for experiment in experiment_package.find('EXPERIMENT'):
             library_descriptors = experiment.find('LIBRARY_DESCRIPTOR')
-            if library_descriptors:
-                library_construction_protocol = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL').text
+            if library_descriptors is not None:
+                if library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL') is not None:
+                    library_construction_protocol = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL').text
+                else:
+                    library_construction_protocol = ""
     return library_construction_protocol
 
 
@@ -243,22 +264,50 @@ def extract_read_information(general_read_values):
             reads[split_read[0]] = split_read[1]
     return reads
 
+def new_extract_read_information(sra_file_list, fastq_map):
+    i = 1
+    for read_info in sra_file_list:
+        for alternative in list(read_info):
+            if 'url' in alternative.attrib:
+                #Asumes there is an order R1, R2, I1, I2
+                filename = alternative.attrib['url'].split('/')[-1]
+                accession = alternative.attrib['url'].split('/')[-2]
+                if accession not in fastq_map:
+                    fastq_map[accession] = {}
+                fastq_map[accession][f'read{i}PairFiles'] = filename
+                i += 1
+                break
+    return fastq_map
 
 def retrieve_fastq_from_experiment(fastq_map,experiment_package):
     def get_reads(fastq_map,experiment_package):
         for run_set in experiment_package.findall('RUN_SET'):
             for run in run_set.findall('RUN'):
-                run_attributes = run.findall('RUN_ATTRIBUTES')
-                for run_attribute in run_attributes:
-                    for attributes in run_attribute.findall('RUN_ATTRIBUTE'):  # More than one attribute and they all have the same tag
+                run_attributes = run.findall('SRAFiles')
+                for sra_files in run_attributes:
+                    run_reads = []
+                    for sra_file in sra_files.findall('SRAFile'):
+                        attributes = sra_file.attrib
+                        # Check files are public and not in SRA format
+                        if attributes['cluster'] == 'public' and not int(attributes['sratoolkit']):
+                            run_reads.append(sra_file)
+                    print(run_reads)
+                    if run_reads:
+                        fastq_map = new_extract_read_information(run_reads, fastq_map)
+                    else:
+                        return {}
+                    """
+                    for attributes in sra_file.findall('RUN_ATTRIBUTE'):  # More than one attribute and they all have the same tag
                         if attributes.find('TAG').text == 'options':
                             reads = extract_read_information(attributes.find('VALUE').text)
                             if reads:
                                 fastq_map[run.attrib['accession']] = reads
                             else:
                                 return {}
+                    """
         return fastq_map
     fastq_map = get_reads(fastq_map,experiment_package)
+    print(fastq_map)
     return fastq_map
 
 
@@ -291,38 +340,44 @@ def get_lane_index(row,cell_suspension,run,lane_index):
     return lane_index
 
 
+# TODO Changed this to not depend on fastq map name conventions
 def get_row(row,file_index,process_id,lane_index,fastq_map):
     new_row = row
     if not fastq_map:
         new_row['fastq_name'] = ''
     else:
         if fastq_map[row['Run']]:
-            new_row['fastq_name'] = fastq_map[row['Run']][file_index]
+            new_row['fastq_name'] = fastq_map[row['Run']].get(file_index)
         else:
             new_row['fastq_name'] = ''
-        if "read1" in file_index:
+        if "I1" in new_row['fastq_name'] or "R3" in new_row['fastq_name']:
             new_row['fastq_file'] = "index1"
-        elif "read2" in file_index:
+        elif "R1" in new_row['fastq_name']:
             new_row['fastq_file'] = "read1"
-        elif "read3" in file_index:
+        elif "R2" in new_row['fastq_name']:
             new_row['fastq_file'] = "read2"
+        elif "R4" in new_row['fastq_name'] or "I2" in new_row['fastq_name']:
+            new_row['fastq_file'] = 'index2'
+
     new_row['process_id'] = process_id
     new_row['lane_index'] = lane_index
     return new_row
 
-
+# TODO add changelog for this function. Accounted lanes
 def integrate_metadata(srp_metadata,fastq_map):
     SRP_df = pd.DataFrame()
     count,cell_suspension,run,lane_index,process_id = initialise(srp_metadata)
     for index, row in srp_metadata.iterrows():
         process_id = get_process_id(row,process_id,cell_suspension)
-        lane_index = get_lane_index(row,cell_suspension,run,lane_index)
-        new_row = get_row(row,'read1PairFiles',process_id,lane_index,fastq_map)
-        SRP_df = SRP_df.append(new_row, ignore_index=True)
-        new_row = get_row(row,'read2PairFiles',process_id,lane_index,fastq_map)
-        SRP_df = SRP_df.append(new_row, ignore_index=True)
-        new_row = get_row(row,'read3PairFiles',process_id,lane_index,fastq_map)
-        SRP_df = SRP_df.append(new_row, ignore_index=True)
+        srr_accession = row['Run']
+        for i in range(len(fastq_map[srr_accession])):
+            if re.search('_L[0-9]{3}', "".join(fastq_map[srr_accession].values())):
+                filename = fastq_map[srr_accession][f'read{i + 1}PairFiles']
+                lane_index = int(re.findall('L[0-9]{3}', filename)[0][-1])
+            else:
+                lane_index = get_lane_index(row, cell_suspension, run, lane_index)
+            new_row = get_row(row,f'read{(i + 1)}PairFiles',process_id,lane_index,fastq_map)
+            SRP_df = SRP_df.append(new_row, ignore_index=True)
     return SRP_df
 
 
@@ -512,17 +567,20 @@ def update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequenc
 
 
 def get_project_main_tab_xls(SRP_df,workbook,geo_accession,out_file,tab_name):
-    tab = get_empty_df(workbook,tab_name)
-    bioproject = list(set(list(SRP_df['BioProject'])))
-    if len(bioproject) > 1:
-        print("more than 1 bioproject, check this")
-    else:
-        bioproject = bioproject[0]
-    project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
-    tab = tab.append({'project.project_core.project_title':project_title,
-                      'project.project_core.project_description':project_description,
-                      'project.geo_series_accessions':geo_accession}, ignore_index=True)
-    write_to_wb(workbook, tab_name, tab)
+    try:
+        tab = get_empty_df(workbook,tab_name)
+        bioproject = list(set(list(SRP_df['BioProject'])))
+        if len(bioproject) > 1:
+            print("more than 1 bioproject, check this")
+        else:
+            bioproject = bioproject[0]
+        project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
+        tab = tab.append({'project.project_core.project_title':project_title,
+                          'project.project_core.project_description':project_description,
+                          'project.geo_series_accessions':geo_accession}, ignore_index=True)
+        write_to_wb(workbook, tab_name, tab)
+    except AttributeError:
+        pass
 
 
 def get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name):
@@ -628,7 +686,7 @@ def get_superseries_from_gse(geo_accession: str) -> str:
 def main():
 
     # read a list of geo accessions from a file
-    geo_accession_list = pd.read_csv("docs/geo_accessions.txt", sep="\t")
+    geo_accession_list = pd.read_csv("docs/geo_accessions-testing.txt", sep="\t")
 
     # initialise dictionary to summarise results
     results = {}
@@ -723,14 +781,17 @@ def main():
                 # get Project metadata: fetch as many fields as is possible using the above metadata accessions
                 get_project_main_tab_xls(SRP_df, workbook, accession, out_file, tab_name="Project")
 
-                # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_publication_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Publications")
+                try:
+                    # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_project_publication_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Publications")
 
-                # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_contributors_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Contributors")
+                    # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_project_contributors_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Contributors")
 
-                # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_funders_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Funders")
+                    # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_project_funders_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Funders")
+                except AttributeError:
+                    pass
 
         # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
         delete_unused_worksheets(workbook)
