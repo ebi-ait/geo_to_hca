@@ -12,6 +12,7 @@ from openpyxl import load_workbook
 import os,sys
 import wget
 import glob
+import argparse
 
 OPTIONAL_TABS = ['Imaged specimen', 'Organoid', 'Cell line', 'Image file', 'Additional reagents',
                  'Familial relationship']
@@ -65,7 +66,7 @@ class SraUtils:
         sleep(0.5)
         srr_metadata_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}')
         if srr_metadata_url.status_code == 400:
-            raise NotFoundSRA(srr_metadata_url, srr_accessions)
+            raise NotFoundSRA(srr_metadata_url,srr_accessions)
         #dom = xml.dom.minidom.parseString(srr_metadata_url.content)
         #pretty_xml_as_string = dom.toprettyxml()
         #print(pretty_xml_as_string)
@@ -126,36 +127,45 @@ def fetch_fastq_names(srr_accessions,srp_metadata):
     for experiment_package in parse_xml(xml_content):
         fastq_map = retrieve_fastq_from_experiment(fastq_map,experiment_package)
     if not fastq_map:
-        print("no fastq found: downloading SRA object and converting to fastq")
-        fastq_map = convert_sra(srp_metadata)
+        # temporary solution
+        print("no fastq file names found: creating dummy fastq map with empty strings")
+        fastq_map = get_dummy_fastq_map(fastq_map,srr_accessions)
+        # possible solution: working function to download and convert SRA object to fastq files
+        # fastq_map = convert_sra(srp_metadata)
     return fastq_map
 
-def convert_sra(srp_metadata):
-    fastq_map = {}
-    for i in range(0,len(list(srp_metadata['Run']))):
-        download_path = list(srp_metadata['download_path'])[i]
-        cmd = "fastq-dump -I --split-files %s" % (download_path)
-        print(cmd)
-        os.system(cmd)
-        fastq_names = glob.glob("*.fastq")
-        if fastq_names:
-            print(fastq_names)
-            for file_name in fastq_names:
-                read1PairFiles = ''
-                read2PairFiles = ''
-                read3PairFiles = ''
-                if "R1" in file_name or "_1" in file_name:
-                    read1PairFiles = file_name
-                    print(read1PairFiles)
-                if "R2" in file_name or "_2" in file_name:
-                    read2PairFiles = file_name
-                    print(read2PairFiles)
-                if "I1" in file_name or "_3" in file_name:
-                    read3PairFiles = file_name
-            fastq_map[list(srp_metadata['Run'])[i]] = {"read1PairFiles":read1PairFiles,"read2PairFiles":read2PairFiles,"read3PairFiles":read3PairFiles}
-            for file_name in fastq_names:
-                os.remove(file_name)
+def get_dummy_fastq_map(fastq_map,srr_accessions):
+    for accession in srr_accessions:
+        fastq_map[accession] = {"read1PairFiles":'',"read2PairFiles":'',"read3PairFiles":''}
     return fastq_map
+
+# for now, don't implement: too slow
+#def convert_sra(srp_metadata):
+    #fastq_map = {}
+    #for i in range(0,len(list(srp_metadata['Run']))):
+        #download_path = list(srp_metadata['download_path'])[i]
+        #cmd = "fastq-dump -I --split-files %s" % (download_path)
+        #print(cmd)
+        #os.system(cmd)
+        #fastq_names = glob.glob("*.fastq")
+        #if fastq_names:
+            #print(fastq_names)
+            #for file_name in fastq_names:
+                #read1PairFiles = ''
+                #read2PairFiles = ''
+                #read3PairFiles = ''
+                #if "R1" in file_name or "_1" in file_name:
+                    #read1PairFiles = file_name
+                    #print(read1PairFiles)
+                #if "R2" in file_name or "_2" in file_name:
+                    #read2PairFiles = file_name
+                    #print(read2PairFiles)
+                #if "I1" in file_name or "_3" in file_name:
+                    #read3PairFiles = file_name
+            #fastq_map[list(srp_metadata['Run'])[i]] = {"read1PairFiles":read1PairFiles,"read2PairFiles":read2PairFiles,"read3PairFiles":read3PairFiles}
+            #for file_name in fastq_names:
+                #os.remove(file_name)
+    #return fastq_map
 
 def fetch_biosample(biosample_accession: str):
     xml_content = SraUtils.srr_biosample(biosample_accession)
@@ -625,16 +635,74 @@ def get_superseries_from_gse(geo_accession: str) -> str:
     sys.stdout = sys.__stdout__
     return superseries
 
+def list_str(values):
+    if "," not in values:
+        raise argparse.ArgumentTypeError("Argument list not valid: comma separated list required")
+    return values.split(',')
+
+def check_file(path):
+    if not os.path.exists(path):
+        raise argparse.ArgumentTypeError("file %s does not exist" % (path))
+    try:
+        df = pd.read_csv(path, sep="\t")
+    except:
+        raise argparse.ArgumentTypeError("file %s is not a valid format" % (path))
+    try:
+        geo_accession_list = list(df["accession"])
+    except:
+        raise argparse.ArgumentTypeError("accession list column not found in file %s" % (path))
+    return geo_accession_list
+
 def main():
 
-    # read a list of geo accessions from a file
-    geo_accession_list = pd.read_csv("docs/geo_accessions.txt", sep="\t")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--accession',type='str',help='GEO accession (str)')
+    parser.add_argument('--accession_list',type=list_str,help='GEO accession list (comma separated)')
+    parser.add_argument('--input_file',type=check_file,help='optional path to tab-delimited input .txt file')
+    parser.add_argument('template',default="docs/hca_template.xlsx",
+                        help='path to an HCA spreadsheet template (xlsx)')
+    parser.add_argument('--header_row',type=int,default=4,
+                        help='header row with HCA programmatic names')
+    parser.add_argument('--input_row1',type=int,default=6,
+                        help='HCA metadata input start row')
+    parser.add_argument('output_dir',default='spreadsheets/',
+                        help='path to output directory; if it does not exist, the directory will be created')
+
+    args = parser.parse_args()
+
+    # check user-specified arguments are valid
+
+    if args.input_file:
+        geo_accession_list = args.input_file
+        print(accession_list)
+    elif args.accession_list:
+        geo_accession_list = args.accession_list
+        print(accession_list)
+    elif args.accession:
+        geo_accession_list = [args.geo_accession]
+        print(geo_accession_list)
+    else:
+        print("GEO accession input is not specified")
+        sys.exit()
+
+    if not os.path.exists(args.template):
+        print("path to HCA template file not found; will revert to default: docs/hca_template.xlsx")
+        template = "docs/hca_template.xlsx"
+    try:
+        workbook = load_workbook(filename=args.template)
+        template = args.template
+    except:
+        print("specified HCA template file is not valid xlsx; will revert to default: docs/hca_template.xlsx")
+        template = "docs/hca_template.xlsx"
+
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
 
     # initialise dictionary to summarise results
     results = {}
 
     # for each geo accession:
-    for geo_accession in list(geo_accession_list["geo_accession"]):
+    for geo_accession in geo_accession_list:
 
         print(geo_accession)
 
@@ -644,18 +712,12 @@ def main():
             geo_accession = return_gse_from_superseries(geo_accession)
             print(geo_accession)
         superseries = geo_accession if isinstance(geo_accession, str) else geo_accession[0]
-        print(geo_accession)
-        #if ';' in geo_accession:
-        #    gse_list = geo_accession.split(',')
-        #    superseries = gse_list[0].split(';')[1]
-        #    geo_accession = [gse.split(';')[0] for gse in gse_list]
-        #    print(geo_accession)
 
         # create a new output file name to store the hca converted metadata
-        out_file = f"spreadsheets/{superseries}.xlsx"
+        out_file = f"{args.output_dir}/{superseries}.xlsx"
 
         # load an empty template HCA metadata excel spreadsheet. All tabs and fields should be in this template.
-        workbook = load_workbook(filename="docs/hca_template.xlsx")
+        workbook = load_workbook(filename=template)
 
         if isinstance(geo_accession, str):
             geo_accession = [geo_accession]
@@ -694,43 +756,42 @@ def main():
                 if not fastq_map:
 
                     results[accession].update({"fastq files available": "no"})
-                    continue
 
                 # integrate metadata and fastq file names into a single dataframe
-                SRP_df = integrate_metadata(srp_metadata, fastq_map)
+                SRP_df = integrate_metadata(srp_metadata,fastq_map)
 
                 # get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions
-                sequence_file_tab = get_sequence_file_tab_xls(SRP_df, workbook, tab_name="Sequence file")
+                sequence_file_tab = get_sequence_file_tab_xls(SRP_df,workbook,tab_name="Sequence file")
 
                 # get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions
-                get_cell_suspension_tab_xls(SRP_df, workbook, out_file, tab_name="Cell suspension")
+                get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name="Cell suspension")
 
                 # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
-                get_specimen_from_organism_tab_xls(SRP_df, workbook, out_file, tab_name="Specimen from organism")
+                get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name="Specimen from organism")
 
                 # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                library_protocol_dict = get_library_protocol_tab_xls(SRP_df, workbook, out_file,
+                library_protocol_dict = get_library_protocol_tab_xls(SRP_df,workbook,out_file,
                                                                     tab_name="Library preparation protocol")
 
                 # get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df, workbook, out_file,
+                sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df,workbook,out_file,
                                                                         tab_name="Sequencing protocol")
 
                 # update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids
-                update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
+                update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,
                                             workbook, out_file, tab_name="Sequence file")
 
                 # get Project metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_main_tab_xls(SRP_df, workbook, accession, out_file, tab_name="Project")
+                get_project_main_tab_xls(SRP_df,workbook,accession,out_file,tab_name="Project")
 
                 # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_publication_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Publications")
+                get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Publications")
 
                 # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_contributors_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Contributors")
+                get_project_contributors_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Contributors")
 
                 # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_funders_tab_xls(SRP_df, workbook, out_file, tab_name="Project - Funders")
+                get_project_funders_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Funders")
 
         # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
         delete_unused_worksheets(workbook)
