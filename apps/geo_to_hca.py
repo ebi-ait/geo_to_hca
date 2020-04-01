@@ -463,6 +463,8 @@ def get_library_protocol_tab_xls(SRP_df,workbook,out_file,tab_name):
                               'library_preparation_protocol.protocol_core.protocol_description': library_protocol,
                               'library_preparation_protocol.input_nucleic_acid_molecule.text': 'polyA RNA',
                               'library_preparation_protocol.nucleic_acid_source':'single cell'}
+            library_protocol_dict[experiment] = {"library_protocol_id":library_protocol_id,"library_protocol_description":
+                library_protocol}
             if "10X" in library_protocol:
                 if "v.2" or "v2" in library_protocol:
                     tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
@@ -498,7 +500,14 @@ def get_library_protocol_tab_xls(SRP_df,workbook,out_file,tab_name):
             tab = tab
         if library_protocol in library_protocol_set:
             tab = tab
-        library_protocol_dict[experiment] = ''
+            for key in library_protocol_dict.keys():
+                if library_protocol_dict[key]["library_protocol_description"] == library_protocol:
+                    library_protocol_id = library_protocol_dict[key]["library_protocol_id"]
+            if not library_protocol_id:
+                library_protocol_id = ''
+            else:
+                library_protocol_dict[experiment] = {"library_protocol_id":library_protocol_id,"library_protocol_description":
+                library_protocol}
     write_to_wb(workbook, tab_name, tab)
     return library_protocol_dict
 
@@ -508,8 +517,7 @@ def get_sequencing_protocol_tab_xls(SRP_df,workbook,out_file,tab_name):
     experiments_dedup = list(set(list(SRP_df['Experiment'])))
     count = 0
     sequencing_protocol_id = "sequencing_protocol_1"
-    instrument_set = list()
-    method_set = list()
+    sequencing_protocol_set = list()
     sequencing_protocol_dict = {}
     for experiment in experiments_dedup:
         library_construction_protocol,instrument = fetch_sequencing_protocol(experiment)
@@ -519,18 +527,27 @@ def get_sequencing_protocol_tab_xls(SRP_df,workbook,out_file,tab_name):
         elif "10X" not in library_construction_protocol:
             paired_end = ''
             method = ''
-        if instrument not in instrument_set or method not in method_set:
+        sequencing_protocol_description = [instrument,method]
+        if sequencing_protocol_description not in sequencing_protocol_set:
             count += 1
             sequencing_protocol_id = "sequencing_protocol_" + str(count)
-            instrument_set.append(instrument)
-            method_set.append(method)
+            sequencing_protocol_set.append(sequencing_protocol_description)
+            sequencing_protocol_dict[experiment] = {"sequencing_protocol_id":sequencing_protocol_id,
+                                                    "sequencing_protocol_description":sequencing_protocol_description}
             tab = tab.append({'sequencing_protocol.protocol_core.protocol_id': sequencing_protocol_id,
                               'sequencing_protocol.instrument_manufacturer_model.text': instrument,
                               'sequencing_protocol.paired_end': paired_end,
                               'sequencing_protocol.method.text': method}, ignore_index=True)
-        if instrument in instrument_set and method in method_set:
+        if sequencing_protocol_description in sequencing_protocol_set:
             tab = tab
-        sequencing_protocol_dict[experiment] = ''
+            for key in sequencing_protocol_dict.keys():
+                if sequencing_protocol_dict[key]["sequencing_protocol_description"] == sequencing_protocol_description:
+                    sequencing_protocol_id = sequencing_protocol_dict[key]["sequencing_protocol_id"]
+            if not sequencing_protocol_id:
+                sequencing_protocol_id = ''
+            else:
+                sequencing_protocol_dict[experiment] = {"sequencing_protocol_id":sequencing_protocol_id,
+                                                    "sequencing_protocol_description":sequencing_protocol_description}
     write_to_wb(workbook, tab_name, tab)
     return sequencing_protocol_dict
 
@@ -539,8 +556,8 @@ def update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequenc
     library_protocol_id_list = list()
     sequencing_protocol_id_list = list()
     for index,row in sequence_file_tab.iterrows():
-        library_protocol_id_list.append(library_protocol_dict[row["cell_suspension.biomaterial_core.biomaterial_id"]])
-        sequencing_protocol_id_list.append(sequencing_protocol_dict[row["cell_suspension.biomaterial_core.biomaterial_id"]])
+        library_protocol_id_list.append(library_protocol_dict[row["cell_suspension.biomaterial_core.biomaterial_id"]]["library_protocol_id"])
+        sequencing_protocol_id_list.append(sequencing_protocol_dict[row["cell_suspension.biomaterial_core.biomaterial_id"]]["sequencing_protocol_id"])
     sequence_file_tab['library_preparation_protocol.protocol_core.protocol_id'] = library_protocol_id_list
     sequence_file_tab['sequencing_protocol.protocol_core.protocol_id'] = sequencing_protocol_id_list
     write_to_wb(workbook, tab_name, sequence_file_tab)
