@@ -321,6 +321,7 @@ def get_lane_index(row,cell_suspension,run,lane_index):
 
 
 # TODO Changed this to not depend on fastq map name conventions
+# TODO add print statement to this function when no R1, R2, R3, R4
 def get_row(row, file_index, process_id, lane_index, fastq_map):
     new_row = row
     if not fastq_map:
@@ -338,6 +339,8 @@ def get_row(row, file_index, process_id, lane_index, fastq_map):
             new_row['fastq_file'] = "read2"
         elif "R4" in new_row['fastq_name'] or "I2" in new_row['fastq_name']:
             new_row['fastq_file'] = 'index2'
+        else:
+            new_row['fastq_file'] = ""
 
     new_row['process_id'] = process_id
     new_row['lane_index'] = lane_index
@@ -790,6 +793,7 @@ def main():
                 # get fastq file names
                 fastq_map, available = fetch_fastq_names(list(srp_metadata['Run']),srp_metadata)
 
+                # TODO create fastq_map check method for number of fastq files
                 # store whether the fastq files were available
 
                 if available:
@@ -831,14 +835,21 @@ def main():
                 try:
                     # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
                     get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Publications")
+                except AttributeError:
+                    print(f'Publication attribute error with GEO project {accession}')
 
+                try:
                     # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
                     get_project_contributors_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Contributors")
+                except AttributeError:
+                    print(f'Contributors attribute error with GEO project {accession}')
 
+                try:
                     # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
                     get_project_funders_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Funders")
                 except AttributeError:
-                    print(f'Attribute error with GEO project {accession}')
+                    print(f'Funders attribute error with GEO project {accession}')
+
         # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
         delete_unused_worksheets(workbook)
 
