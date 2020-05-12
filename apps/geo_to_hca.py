@@ -52,12 +52,40 @@ class NotFoundSRA(Exception):
                 f"Error as returned by SRA:\n{self.error}"
                 f"The provided accessions were:\n{accession_string}\n\n")
 
+class NotFoundENA(Exception):
+    """
+    Sub-class for Exception to handle 400 error status codes.
+    """
+    def __init__(self, response, title):
+        self.response = response
+        self.title = title
+        self.error = self.parse_xml_error()
+
+    def parse_xml_error(self):
+        root = xm.fromstring(self.response.content)
+        return root.find('ERROR').text  # Return the string for the error returned by Efetch
+
+    def __str__(self):
+        return (f"\nStatus code of the request: {self.response.status_code}.\n"
+                f"Error as returned by SRA:\n{self.error}"
+                f"The provided project title or name was:\n{self.title}\n\n")
+
 class SraUtils:
 
     @staticmethod
     def sra_accession_from_geo(geo_accession: str):
         sleep(0.5)
-        srp = SRAweb().gse_to_srp(geo_accession)
+        try:
+            srp = SRAweb().gse_to_srp(geo_accession)
+        except:
+            srp = None
+        if not isinstance(srp, pd.DataFrame):
+            srp = None
+        elif isinstance(srp, pd.DataFrame):
+            if srp.shape[0] == 0:
+                srp = None
+            else:
+                srp = srp
         return srp
 
     @staticmethod
@@ -69,13 +97,17 @@ class SraUtils:
     @staticmethod
     def srr_fastq(srr_accessions):
         sleep(0.5)
-        srr_metadata_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}')
+        url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}'
+        srr_metadata_url = rq.get(url)
         if srr_metadata_url.status_code == 400:
             raise NotFoundSRA(srr_metadata_url, srr_accessions)
-        #dom = xml.dom.minidom.parseString(srr_metadata_url.content)
-        #pretty_xml_as_string = dom.toprettyxml()
-        #print(pretty_xml_as_string)
-        return xm.fromstring(srr_metadata_url.content),srr_metadata_url.content
+        try:
+            xml = xm.fromstring(srr_metadata_url.content)
+            xml_content = srr_metadata_url.content
+        except:
+            xml = None
+            xml_content = None
+        return xml,xml_content,url
 
     @staticmethod
     def srr_experiment(srr_accession):
@@ -112,14 +144,47 @@ class SraUtils:
 
 def fetch_srp_accession(geo_accession: str):
     srp = SraUtils.sra_accession_from_geo(geo_accession)
-    if isinstance(srp, pd.DataFrame):
-        if not srp.empty:
-            assert(len(srp) == 1)
+    if srp is not None:
+        if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
-        else:
-            srp = "srp not found"
-    else:
-        srp = "srp not found"
+        elif srp.shape[0] > 1:
+            answer = input("More than 1 SRA Study Accession has been found. Is this the intended SRA study id? %s [y/n]: " % (srp.iloc[0]["study_accession"]))
+            if answer.lower() in ['y', "yes"]:
+                srp = srp.iloc[0]["study_accession"]
+            if answer.lower() in ['n', "no"]:
+                answer = input("Alternatively, is this the intended SRA study id? %s [y/n]: " % (srp.iloc[1]["study_accession"]))
+                if answer.lower() in ['y', "yes"]:
+                        srp = srp.iloc[1]["study_accession"]
+                if answer.lower() in ['n', "no"]:
+                        answer = input("Alternatively, is this the intended SRA study id? %s [y/n]: " % (srp.iloc[2]["study_accession"]))
+                        if answer.lower() in ['y', "yes"]:
+                            srp = srp.iloc[2]["study_accession"]
+                        if answer.lower() in ['n', "no"]:
+                            print("SRA study accession not found")
+                            srp = None
+    elif srp is None:
+        answer = input("Could not recognise GEO accession %s; is it a GEO Superseries? If yes, please enter the project GEO accession manually here (GSExxxxxx) or type exit for program exit: " % (geo_accession))
+        srp = SraUtils.sra_accession_from_geo(answer.upper())
+        if srp is None:
+            print("GEO accession still not recognised; exiting program")
+        elif srp is not None:
+            if srp.shape[0] == 1:
+                srp = srp.iloc[0]["study_accession"]
+            elif srp.shape[0] > 1:
+                answer = input("More than 1 SRA Study Accession has been found. Is this the intended SRA study id? %s [y/n]: " % (srp.iloc[0]["study_accession"]))
+                if answer.lower() in ['y', "yes"]:
+                    srp = srp.iloc[0]["study_accession"]
+                if answer.lower() in ['n', "no"]:
+                    answer = input("Alternatively, is this the intended SRA study id? %s [y/n]: " % (srp.iloc[1]["study_accession"]))
+                    if answer.lower() in ['y', "yes"]:
+                        srp = srp.iloc[1]["study_accession"]
+                    if answer.lower() in ['n', "no"]:
+                        answer = input("Alternatively, is this the intended SRA study id? %s [y/n]: " % (srp.iloc[2]["study_accession"]))
+                        if answer.lower() in ['y', "yes"]:
+                            srp = srp.iloc[2]["study_accession"]
+                        if answer.lower() in ['n', "no"]:
+                            print("SRA study accession not found")
+                            srp = None
     return srp
 
 def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
@@ -140,13 +205,18 @@ def alternative_fastq_ENA(srp_metadata, fastq_map):
 
 
 def fetch_fastq_names(srr_accessions,srp_metadata):
-    xml_content,content = SraUtils.srr_fastq(srr_accessions)
-    fastq_map = {}
-    available = 'yes'
-    for experiment_package in parse_xml(xml_content):
-        fastq_map = retrieve_fastq_from_experiment(fastq_map, experiment_package)
+    xml_content,content,url = SraUtils.srr_fastq(srr_accessions)
+    if xml_content is None or content is None:
+        print("Error parsing xml for run accessions (xml.etree.ElementTree.ParseError); cannot get fastq file names from SRA due to error in xml")
+        print("Printing url for manual debugging: %s" % (url))
+        fastq_map = {}
+    else:
+        fastq_map = {}
+        available = 'yes'
+        for experiment_package in parse_xml(xml_content):
+            fastq_map = retrieve_fastq_from_experiment(fastq_map, experiment_package)
     if not fastq_map:
-        print("no fastq found: downloading SRA object and converting to fastq")
+        print("fastq not found in SRA: attempting to find and get fastq from ENA. This can take some time if there are many runs.")
         fastq_map = alternative_fastq_ENA(srp_metadata, fastq_map)
         if not fastq_map:
             available = None
@@ -196,36 +266,205 @@ def fetch_sequencing_protocol(srr_accession: str):
 def fetch_bioproject(bioproject_accession: str):
     xml_content = SraUtils.srp_bioproject(bioproject_accession)
     bioproject_metadata = xml_content.find('DocumentSummary')
-    project_name = bioproject_metadata.find("Project").find('ProjectDescr').find('Name').text
-    project_title = bioproject_metadata.find("Project").find('ProjectDescr').find('Title').text
-    project_description = bioproject_metadata.find("Project").find('ProjectDescr').find('Description').text
+    try:
+        project_name = bioproject_metadata.find("Project").find('ProjectDescr').find('Name').text
+    except:
+        print("no project name")
+        project_name = None
+    try:
+        project_title = bioproject_metadata.find("Project").find('ProjectDescr').find('Title').text
+    except:
+        print("no project title")
+        project_title = None
+    try:
+        project_description = bioproject_metadata.find("Project").find('ProjectDescr').find('Description').text
+    except:
+        project_description = ''
+        print("no project description")
     project_publication = bioproject_metadata.find("Project").find('ProjectDescr').find('Publication')
-    if project_publication.find('DbType').text == 'Pubmed' or project_publication.find('DbType').text == 'ePubmed':
-        project_pubmed_id = project_publication.find('Reference').text
-    else:
-        project_pubmed_id = ''
+    try:
+        if project_publication.find('DbType').text == 'Pubmed' or project_publication.find('DbType').text == 'ePubmed':
+            project_pubmed_id = project_publication.find('Reference').text
+    except:
+        print("No publication for project %s was found: searching project title in EuropePMC" % (bioproject_accession))
+    if not project_publication or not project_pubmed_id:
+        if project_title:
+            print("project title is: %s" % (project_title))
+            url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
+            if url.status_code == 400:
+                raise NotFoundENA(url, project_title)
+            else:
+                xml_content = xm.fromstring(url.content)
+                try:
+                    results = list()
+                    result_list = xml_content.find("resultList")
+                    for result in result_list:
+                        results.append(result)
+                    journal_title = results[0].find("journalTitle").text
+                    if journal_title is None or journal_title == '':
+                        project_pubmed_id = ''
+                        print("no publication results for project title in ENA")
+                    else:
+                        answer = input("A publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
+                        if answer.lower() in ['y',"yes"]:
+                            project_pubmed_id = results[0].find("pmid").text
+                        else:
+                            journal_title = results[1].find("journalTitle").text
+                            if journal_title is None or journal_title == '':
+                                project_pubmed_id = ''
+                                print("no publication results for project title in ENA")
+                            else:
+                                answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
+                                if answer.lower() in ['y', "yes"]:
+                                    project_pubmed_id = results[1].find("pmid").text
+                                else:
+                                    journal_title = results[2].find("journalTitle").text
+                                    if journal_title is None or journal_title == '':
+                                        project_pubmed_id = ''
+                                        print("no publication results for project title in ENA")
+                                    else:
+                                        answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
+                                        if answer.lower() in ['y', "yes"]:
+                                            project_pubmed_id = results[2].find("pmid").text
+                                        else:
+                                            project_pubmed_id = ''
+                                            print("no publication results for project title in ENA")
+                except:
+                    print("no publication results for project title in ENA")
+                    project_pubmed_id = ''
+        if not project_pubmed_id or project_pubmed_id == '':
+            if project_name:
+                print("project name is %s:" % (project_name))
+                url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
+                if url.status_code == 400:
+                    raise NotFoundENA(url, project_name)
+                else:
+                    xml_content = xm.fromstring(url.content)
+                    try:
+                        results = list()
+                        result_list = xml_content.find("resultList")
+                        for result in result_list:
+                            results.append(result)
+                        journal_title = results[0].find("journalTitle").text
+                        if journal_title is None or journal_title == '':
+                            project_pubmed_id = ''
+                            print("no publication results for project name in ENA")
+                        else:
+                            answer = input("A publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
+                            if answer.lower() in ['y',"yes"]:
+                                project_pubmed_id = results[0].find("pmid").text
+                            else:
+                                journal_title = results[1].find("journalTitle").text
+                                if journal_title is None or journal_title == '':
+                                    project_pubmed_id = ''
+                                    print("no publication results for project name in ENA")
+                                else:
+                                    answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
+                                    if answer.lower() in ['y', "yes"]:
+                                        project_pubmed_id = results[1].find("pmid").text
+                                    else:
+                                        journal_title = results[2].find("journalTitle").text
+                                        if journal_title is None or journal_title == '':
+                                            project_pubmed_id = ''
+                                            print("no publication results for project name in ENA")
+                                        else:
+                                            answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
+                                            if answer.lower() in ['y', "yes"]:
+                                                project_pubmed_id = results[2].find("pmid").text
+                                            else:
+                                                project_pubmed_id = ''
+                                                print("no publication results for project name in ENA")
+                    except:
+                        print("no publication results for project name in ENA")
+                        project_pubmed_id = ''
+        if not project_pubmed_id or project_pubmed_id == '':
+            project_title = ''
+            project_name = ''
+            project_pubmed_id = ''
     return project_name,project_title,project_description,project_pubmed_id
 
-
-def fetch_pubmed(project_pubmed_id: str):
+def fetch_pubmed(project_pubmed_id: str,iteration: int):
     xml_content = SraUtils.pubmed_id(project_pubmed_id)
     author_list = list()
     grant_list=  list()
-    title = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("ArticleTitle").text
-    authors = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("AuthorList")
-    if authors:
+    try:
+        title = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("ArticleTitle").text
+    except:
+        title = ''
+        if iteration == 1:
+            print("no publication title found")
+    try:
+        authors = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("AuthorList")
+    except:
+        if iteration == 1:
+            print("no authors found in SRA")
+        try:
+            url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
+            if url.status_code == 400:
+                raise NotFoundENA(url, title)
+            else:
+                xml_content_2 = xm.fromstring(url.content)
+            try:
+                results = list()
+                result_list = xml_content_2.find("resultList")
+                for result in result_list:
+                    results.append(result)
+                author_string = results[0].find("authorString").text
+                print(author_string)
+                #doi = results[0].find("doi").text
+            except:
+                authors = None
+                if iteration == 1:
+                    print("no authors found in ENA")
+        except:
+            authors = None
+            if iteration == 1:
+                print("no authors found in ENA")
+    if authors is not None:
         for author in authors:
-            author_list.append([author.find("LastName").text,author.find("ForeName").text,author.find("Initials").text,
-                                author.find('AffiliationInfo').find("Affiliation").text])
-    grants = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("GrantList")
-    if grants:
+            try:
+                lastname = author.find("LastName").text
+            except:
+                lastname = ''
+            try:
+                forename = author.find("ForeName").text
+            except:
+                forename = ''
+            try:
+                initials = author.find("Initials").text
+            except:
+                initials = ''
+            try:
+                affiliation = author.find('AffiliationInfo').find("Affiliation").text
+            except:
+                affiliation = ''
+            author_list.append([lastname,forename,initials,affiliation])
+    try:
+        grants = xml_content.find("PubmedArticle").find("MedlineCitation").find("Article").find("GrantList")
+    except:
+        grants = None
+        if iteration == 1:
+            print("no grants found in SRA or ENA")
+    if grants is not None:
         for grant in grants:
-            grant_list.append([grant.find("GrantID").text,grant.find("Agency").text])
-    articles = xml_content.find('PubmedArticle').find('PubmedData').find('ArticleIdList')
-    if articles:
+            try:
+                id = grant.find("GrantID").text
+            except:
+                id = ''
+            try:
+                agency = grant.find("Agency").text
+            except:
+                agency = ''
+            grant_list.append([id,agency])
+    try:
+        articles = xml_content.find('PubmedArticle').find('PubmedData').find('ArticleIdList')
         for article_id in articles:
             if "/" in article_id.text:
                 article_doi_id = article_id.text
+    except:
+        article_doi_id = ''
+        if iteration == 1:
+            print("no publication doi found")
     return title,author_list,grant_list,article_doi_id
 
 
@@ -251,14 +490,23 @@ def new_extract_read_information(sra_file_list, fastq_map):
     for read_info in sra_file_list:
         for alternative in list(read_info):
             if 'url' in alternative.attrib:
-                #Asumes there is an order R1, R2, I1, I2
-                filename = alternative.attrib['url'].split('/')[-1]
-                accession = alternative.attrib['url'].split('/')[-2]
-                if accession not in fastq_map:
-                    fastq_map[accession] = {}
-                fastq_map[accession][f'read{i}PairFiles'] = filename
-                i += 1
-                break
+                if "fastq" in alternative.attrib['url']:
+                    #Asumes there is an order R1, R2, I1, I2
+                    filename = alternative.attrib['url'].split('/')[-1]
+                    accession = alternative.attrib['url'].split('/')[-2]
+                    if accession not in fastq_map.keys():
+                        fastq_map[accession] = {}
+                    fastq_map[accession][f'read{i}PairFiles'] = filename
+                    i += 1
+                    break
+                elif "fastq" not in alternative.attrib['url']:
+                    filename = ''
+                    accession = alternative.attrib['url'].split('/')[-2]
+                    if accession not in fastq_map.keys():
+                        fastq_map[accession] = {}
+                    fastq_map[accession][f'read{i}PairFiles'] = filename
+                    i += 1
+                    break
     return fastq_map
 
 def retrieve_fastq_from_experiment(fastq_map,experiment_package):
@@ -271,7 +519,7 @@ def retrieve_fastq_from_experiment(fastq_map,experiment_package):
                     for sra_file in sra_files.findall('SRAFile'):
                         attributes = sra_file.attrib
                         # Check files are public and not in SRA format
-                        if attributes['cluster'] == 'public' and not int(attributes['sratoolkit']):
+                        if attributes['cluster'] == 'public':
                             run_reads.append(sra_file)
                     if run_reads:
                         fastq_map = new_extract_read_information(run_reads, fastq_map)
@@ -326,22 +574,26 @@ def get_row(row, file_index, process_id, lane_index, fastq_map):
     new_row = row
     if not fastq_map:
         new_row['fastq_name'] = ''
+        new_row['fastq_file'] = ''
     else:
-        if fastq_map[row['Run']]:
-            new_row['fastq_name'] = fastq_map[row['Run']].get(file_index)
-        else:
-            new_row['fastq_name'] = ''
-        if "I1" in new_row['fastq_name'] or "R3" in new_row['fastq_name']:
-            new_row['fastq_file'] = "index1"
-        elif "R1" in new_row['fastq_name']:
-            new_row['fastq_file'] = "read1"
-        elif "R2" in new_row['fastq_name']:
-            new_row['fastq_file'] = "read2"
-        elif "R4" in new_row['fastq_name'] or "I2" in new_row['fastq_name']:
-            new_row['fastq_file'] = 'index2'
-        else:
-            new_row['fastq_file'] = ""
-
+        try:
+            if fastq_map[row['Run']]:
+                new_row['fastq_name'] = fastq_map[row['Run']].get(file_index)
+            else:
+                new_row['fastq_name'] = ''
+            if "I1" in new_row['fastq_name'] or "R3" in new_row['fastq_name']:
+                new_row['fastq_file'] = 'index1'
+            elif "R1" in new_row['fastq_name']:
+                new_row['fastq_file'] = 'read1'
+            elif "R2" in new_row['fastq_name']:
+                new_row['fastq_file'] = 'read2'
+            elif "R4" in new_row['fastq_name'] or "I2" in new_row['fastq_name']:
+                new_row['fastq_file'] = 'index2'
+            else:
+                new_row['fastq_file'] = ''
+        except:
+                new_row['fastq_name'] = ''
+                new_row['fastq_file'] = ''
     new_row['process_id'] = process_id
     new_row['lane_index'] = lane_index
     return new_row
@@ -353,15 +605,30 @@ def integrate_metadata(srp_metadata,fastq_map):
     for index, row in srp_metadata.iterrows():
         process_id = get_process_id(row,process_id,cell_suspension)
         srr_accession = row['Run']
-        for i in range(len(fastq_map[srr_accession])):
-            if re.search('_L[0-9]{3}', "".join(fastq_map[srr_accession].values())):
-                filename = fastq_map[srr_accession][f'read{i + 1}PairFiles']
-                lane_index = int(re.findall('L[0-9]{3}', filename)[0][-1])
-            else:
-                lane_index = ""
-            new_row = get_row(row,f'read{(i + 1)}PairFiles',process_id,lane_index,fastq_map)
-            SRP_df = SRP_df.append(new_row, ignore_index=True)
-    return SRP_df
+        if len(fastq_map[srr_accession]) >= 3:
+            result = "yes"
+            for i in range(len(fastq_map[srr_accession])):
+                if re.search('_L[0-9]{3}', "".join(fastq_map[srr_accession].values())):
+                    filename = fastq_map[srr_accession][f'read{i + 1}PairFiles']
+                    try:
+                        lane_index = int(re.findall('L[0-9]{3}', filename)[0][-1])
+                    except:
+                        try:
+                            lane_index = int(re.findall('L[0-9]{4}', filename)[0][-1])
+                        except:
+                            lane_index = ''
+                else:
+                    lane_index = ''
+                new_row = get_row(row, f'read{(i + 1)}PairFiles', process_id, lane_index, fastq_map)
+                SRP_df = SRP_df.append(new_row, ignore_index=True)
+        if len(fastq_map[srr_accession]) < 3:
+            print("No fastq file name for Run accession: %s" % (srr_accession))
+            result = "no"
+            for i in range(0,3):
+                lane_index = ''
+                new_row = get_row(row,f'read{(i + 1)}PairFiles',process_id,lane_index,fastq_map)
+                SRP_df = SRP_df.append(new_row, ignore_index=True)
+    return SRP_df,result
 
 
 def get_empty_df(workbook,tab_name):
@@ -582,22 +849,19 @@ def get_project_main_tab_xls(SRP_df,workbook,geo_accession,out_file,tab_name):
         write_to_wb(workbook, tab_name, tab)
     except AttributeError:
         pass
+    return project_name,project_title,project_description,project_pubmed_id
 
 
-def get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name):
+def get_project_publication_tab_xls(workbook,tab_name,project_pubmed_id):
     tab = get_empty_df(workbook,tab_name)
-    bioproject = list(set(list(SRP_df['BioProject'])))
-    if len(bioproject) > 1:
-        print("more than 1 bioproject, check this")
-    else:
-        bioproject = bioproject[0]
-    project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
-    title,author_list,grant_list,article_doi_id = fetch_pubmed(project_pubmed_id)
+    title,author_list,grant_list,article_doi_id = fetch_pubmed(project_pubmed_id,iteration=1)
     name_list = list()
     for author in author_list:
         name = author[0] + ' ' + author[2] + "||"
         name_list.append(name)
-    tab = tab.append({'project.publications.authors':''.join(name_list),
+    name_list = ''.join(name_list)
+    name_list = name_list[:len(name_list)-2]
+    tab = tab.append({'project.publications.authors':name_list,
                       'project.publications.title':title,
                       'project.publications.doi':article_doi_id,
                       'project.publications.pmid':project_pubmed_id,
@@ -605,15 +869,9 @@ def get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name):
     write_to_wb(workbook, tab_name, tab)
 
 
-def get_project_contributors_tab_xls(SRP_df,workbook,out_file,tab_name):
+def get_project_contributors_tab_xls(workbook,tab_name,project_pubmed_id):
     tab = get_empty_df(workbook,tab_name)
-    bioproject = list(set(list(SRP_df['BioProject'])))
-    if len(bioproject) > 1:
-        print("more than 1 bioproject, check this")
-    else:
-        bioproject = bioproject[0]
-    project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
-    title, author_list, grant_list, article_doi_id = fetch_pubmed(project_pubmed_id)
+    title, author_list, grant_list, article_doi_id = fetch_pubmed(project_pubmed_id,iteration=2)
     for author in author_list:
         name = author[1] + ',,' + list(author)[0]
         affiliation = author[3]
@@ -621,15 +879,9 @@ def get_project_contributors_tab_xls(SRP_df,workbook,out_file,tab_name):
     write_to_wb(workbook, tab_name, tab)
 
 
-def get_project_funders_tab_xls(SRP_df,workbook,out_file,tab_name):
+def get_project_funders_tab_xls(workbook,tab_name,project_pubmed_id):
     tab = get_empty_df(workbook,tab_name)
-    bioproject = list(set(list(SRP_df['BioProject'])))
-    if len(bioproject) > 1:
-        print("more than 1 bioproject, check this")
-    else:
-        bioproject = bioproject[0]
-    project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
-    title, author_list, grant_list, article_doi_id = fetch_pubmed(project_pubmed_id)
+    title, author_list, grant_list, article_doi_id = fetch_pubmed(project_pubmed_id,iteration=3)
     for grant in grant_list:
         tab = tab.append({'project.funders.grant_id':grant[0],'project.funders.organization':grant[1]}, ignore_index=True)
     write_to_wb(workbook, tab_name, tab)
@@ -754,9 +1006,7 @@ def main():
 
         if ',' in geo_accession:
             geo_accession = get_superseries_from_gse(geo_accession.split(',')[0])
-            print(geo_accession)
             geo_accession = return_gse_from_superseries(geo_accession)
-            print(geo_accession)
         superseries = geo_accession if isinstance(geo_accession, str) else geo_accession[0]
 
         # create a new output file name to store the hca converted metadata
@@ -772,14 +1022,9 @@ def main():
             print(f"processing GEO dataset {accession}")
 
             # fetch the SRA study accession given the geo accession
-            try:
-                srp_accession = fetch_srp_accession(accession)
-            # Deal with sraweb package doing a sys.exit(1) if it doesn't find the accession
-            except SystemExit:
-                continue
+            srp_accession = fetch_srp_accession(accession)
 
-            # if an empty dataframe is returned, skip this geo accession and move to next accession in the file.
-            if srp_accession == "srp not found":
+            if srp_accession is None:
                 results[accession] = {"SRA Study available": "no"}
                 results[accession].update({"fastq files available": "na"})
                 continue
@@ -796,59 +1041,61 @@ def main():
                 # TODO create fastq_map check method for number of fastq files
                 # store whether the fastq files were available
 
-                if available:
-
-                    results[accession].update({"fastq files available": "yes"})
-
                 if not available:
 
                     results[accession].update({"fastq files available": "no"})
+                    continue
 
-                # integrate metadata and fastq file names into a single dataframe
-                SRP_df = integrate_metadata(srp_metadata,fastq_map)
+                else:
 
-                # get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions
-                sequence_file_tab = get_sequence_file_tab_xls(SRP_df,workbook,tab_name="Sequence file")
+                    # integrate metadata and fastq file names into a single dataframe
+                    SRP_df,result = integrate_metadata(srp_metadata, fastq_map)
+                    if result == "no":
+                        results[accession].update({"All fastq files are available": "no"})
+                    elif result == "yes":
+                        results[accession].update({"All fastq files are available": "yes"})
 
-                # get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions
-                get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name="Cell suspension")
+                    # get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions
+                    sequence_file_tab = get_sequence_file_tab_xls(SRP_df,workbook,tab_name="Sequence file")
 
-                # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
-                get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name="Specimen from organism")
+                    # get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name="Cell suspension")
 
-                # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                library_protocol_dict = get_library_protocol_tab_xls(SRP_df,workbook,out_file,
-                                                                    tab_name="Library preparation protocol")
+                    # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
+                    get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name="Specimen from organism")
 
-                # get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions
-                sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df,workbook,out_file,
+                    # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
+                    library_protocol_dict = get_library_protocol_tab_xls(SRP_df,workbook,out_file,
+                                                                        tab_name="Library preparation protocol")
+
+                    # get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions
+                    sequencing_protocol_dict = get_sequencing_protocol_tab_xls(SRP_df,workbook,out_file,
                                                                         tab_name="Sequencing protocol")
 
-                # update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids
-                update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,
-                                            workbook, out_file, tab_name="Sequence file")
+                    # update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids
+                    update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,
+                                                workbook, out_file, tab_name="Sequence file")
 
-                # get Project metadata: fetch as many fields as is possible using the above metadata accessions
-                get_project_main_tab_xls(SRP_df,workbook,accession,out_file,tab_name="Project")
+                    # get Project metadata: fetch as many fields as is possible using the above metadata accessions
+                    project_name, project_title, project_description, project_pubmed_id = get_project_main_tab_xls(SRP_df,workbook,accession,out_file,tab_name="Project")
 
-                # TODO Actually fix the error instead of avoiding
-                try:
-                    # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_publication_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Publications")
-                except AttributeError:
-                    print(f'Publication attribute error with GEO project {accession}')
+                    try:
+                        # get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions
+                        get_project_publication_tab_xls(workbook,tab_name="Project - Publications",project_pubmed_id=project_pubmed_id)
+                    except AttributeError:
+                        print(f'Publication attribute error with GEO project {accession}')
 
-                try:
-                    # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_contributors_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Contributors")
-                except AttributeError:
-                    print(f'Contributors attribute error with GEO project {accession}')
+                    try:
+                        # get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions
+                        get_project_contributors_tab_xls(workbook,tab_name="Project - Contributors",project_pubmed_id=project_pubmed_id)
+                    except AttributeError:
+                        print(f'Contributors attribute error with GEO project {accession}')
 
-                try:
-                    # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
-                    get_project_funders_tab_xls(SRP_df,workbook,out_file,tab_name="Project - Funders")
-                except AttributeError:
-                    print(f'Funders attribute error with GEO project {accession}')
+                    try:
+                        # get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions
+                        get_project_funders_tab_xls(workbook,tab_name="Project - Funders",project_pubmed_id=project_pubmed_id)
+                    except AttributeError:
+                        print(f'Funders attribute error with GEO project {accession}')
 
         # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
         delete_unused_worksheets(workbook)
