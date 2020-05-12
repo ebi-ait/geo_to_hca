@@ -694,7 +694,9 @@ def get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name):
     experiments_dedup = list(set(list(SRP_df['Experiment'])))
     for experiment in experiments_dedup:
         biosample = list(SRP_df.loc[SRP_df['Experiment'] == experiment]['BioSample'])[0]
+        gsm_sample = list(SRP_df.loc[SRP_df['Experiment'] == experiment]['SampleName'])[0]
         tab = tab.append({'cell_suspension.biomaterial_core.biomaterial_id':experiment,
+                          'cell_suspension.biomaterial_core.biomaterial_name':gsm_sample,
                          'specimen_from_organism.biomaterial_core.biomaterial_id':biosample,
                           'cell_suspension.biomaterial_core.ncbi_taxon_id':list(SRP_df.loc[SRP_df['Experiment'] == experiment]['TaxID'])[0],
                          'cell_suspension.genus_species.text':list(SRP_df.loc[SRP_df['Experiment'] == experiment]['ScientificName'])[0],
@@ -840,6 +842,8 @@ def update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequenc
 
 # TODO Actually fix error instead of avoiding it
 def get_project_main_tab_xls(SRP_df,workbook,geo_accession,out_file,tab_name):
+    study = list(SRP_df['SRAStudy'])[0]
+    project = list(SRP_df['BioProject'])[0]
     try:
         tab = get_empty_df(workbook,tab_name)
         bioproject = list(set(list(SRP_df['BioProject'])))
@@ -850,7 +854,9 @@ def get_project_main_tab_xls(SRP_df,workbook,geo_accession,out_file,tab_name):
         project_name,project_title,project_description,project_pubmed_id = fetch_bioproject(bioproject)
         tab = tab.append({'project.project_core.project_title':project_title,
                           'project.project_core.project_description':project_description,
-                          'project.geo_series_accessions':geo_accession}, ignore_index=True)
+                          'project.geo_series_accessions':geo_accession,
+                          'project.insdc_study_accessions':study,
+                          'project.insdc_project_accessions':project}, ignore_index=True)
         write_to_wb(workbook, tab_name, tab)
     except AttributeError:
         pass
