@@ -539,33 +539,32 @@ def retrieve_fastq_from_experiment(fastq_map,experiment_package):
     return fastq_map
 
 
-def initialise(srp_metadata):
-    count = 1
-    cell_suspension = list(srp_metadata['Experiment'])[0]
-    run = list(srp_metadata['Run'])[0]
-    lane_index = 1
-    process_id = 'process_1'
-    return count,cell_suspension,run,lane_index,process_id
+#def initialise(srp_metadata):
+#    count = 1
+#    cell_suspension = list(srp_metadata['Experiment'])[0]
+#    run = list(srp_metadata['Run'])[0]
+#    lane_index = 1
+#    return count,cell_suspension,run,lane_index
 
 
-def get_process_id(row,process_id,cell_suspension):
-    count = int(process_id.split("process_")[1])
-    if row['Experiment'] == cell_suspension:
-        process_id = process_id
-    else:
-        count += 1
-        process_id = 'process_' + str(count)
-    return process_id
+#def get_process_id(row,process_id,cell_suspension):
+#    count = int(process_id.split("process_")[1])
+#    if row['Experiment'] == cell_suspension:
+#        process_id = process_id
+#    else:
+#        count += 1
+#        process_id = 'process_' + str(count)
+#    return process_id
 
 
-def get_lane_index(row,cell_suspension,run,lane_index):
-    if row['Experiment'] == cell_suspension and row['Run'] == run:
-        lane_index = lane_index
-    elif row['Experiment'] == cell_suspension and row['Run'] != run:
-        lane_index += 1
-    elif row['Experiment'] != cell_suspension:
-        lane_index = 1
-    return lane_index
+#def get_lane_index(row,cell_suspension,run,lane_index):
+#    if row['Experiment'] == cell_suspension and row['Run'] == run:
+#        lane_index = lane_index
+#    elif row['Experiment'] == cell_suspension and row['Run'] != run:
+#        lane_index += 1
+#    elif row['Experiment'] != cell_suspension:
+#        lane_index = 1
+#    return lane_index
 
 
 # TODO Changed this to not depend on fastq map name conventions
@@ -601,9 +600,9 @@ def get_row(row, file_index, process_id, lane_index, fastq_map):
 # TODO add changelog for this function. Accounted lanes
 def integrate_metadata(srp_metadata,fastq_map):
     SRP_df = pd.DataFrame()
-    count,cell_suspension,run,lane_index,process_id = initialise(srp_metadata)
+    #count,cell_suspension,run,lane_index = initialise(srp_metadata)
     for index, row in srp_metadata.iterrows():
-        process_id = get_process_id(row,process_id,cell_suspension)
+        #process_id = get_process_id(row,process_id,cell_suspension)
         srr_accession = row['Run']
         if len(fastq_map[srr_accession]) >= 3:
             result = "yes"
@@ -619,6 +618,7 @@ def integrate_metadata(srp_metadata,fastq_map):
                             lane_index = ''
                 else:
                     lane_index = ''
+                process_id = ''
                 new_row = get_row(row, f'read{(i + 1)}PairFiles', process_id, lane_index, fastq_map)
                 SRP_df = SRP_df.append(new_row, ignore_index=True)
         if len(fastq_map[srr_accession]) < 3:
@@ -626,6 +626,7 @@ def integrate_metadata(srp_metadata,fastq_map):
             result = "no"
             for i in range(0,3):
                 lane_index = ''
+                process_id=''
                 new_row = get_row(row,f'read{(i + 1)}PairFiles',process_id,lane_index,fastq_map)
                 SRP_df = SRP_df.append(new_row, ignore_index=True)
     return SRP_df,result
@@ -683,7 +684,8 @@ def get_sequence_file_tab_xls(SRP_df,workbook,tab_name):
                           'cell_suspension.biomaterial_core.biomaterial_id':row['Experiment'],
                           'library_preparation_protocol.protocol_core.protocol_id':'',
                           'sequencing_protocol.protocol_core.protocol_id':'',
-                          'process.process_core.process_id':row['process_id']}, ignore_index=True)
+                          'process.process_core.process_id':row['Run']}, ignore_index=True)
+    tab = tab.sort_values(by='sequence_file.insdc_run_accessions')
     return tab
 
 
@@ -697,6 +699,7 @@ def get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name):
                           'cell_suspension.biomaterial_core.ncbi_taxon_id':list(SRP_df.loc[SRP_df['Experiment'] == experiment]['TaxID'])[0],
                          'cell_suspension.genus_species.text':list(SRP_df.loc[SRP_df['Experiment'] == experiment]['ScientificName'])[0],
                          'cell_suspension.biomaterial_core.biosamples_accession':biosample}, ignore_index=True)
+    tab = tab.sort_values(by='cell_suspension.biomaterial_core.biomaterial_id')
     write_to_wb(workbook, tab_name, tab)
 
 
@@ -713,7 +716,9 @@ def get_specimen_from_organism_tab_xls(SRP_df,workbook,out_file,tab_name):
                           'specimen_from_organism.genus_species.ontology_label': list(SRP_df.loc[SRP_df['BioSample'] == biosample_accession]['ScientificName'])[0],
                           'specimen_from_organism.biomaterial_core.biosamples_accession': biosample_accession,
                           'specimen_from_organism.biomaterial_core.insdc_sample_accession': list(SRP_df.loc[SRP_df['BioSample'] == biosample_accession]['Sample'])[0],
-                          'collection_protocol.protocol_core.protocol_id':''}, ignore_index=True)
+                          'collection_protocol.protocol_core.protocol_id':'',
+                          'process.insdc_experiment.insdc_experiment_accession':SRP_df[SRP_df['BioSample'] == biosample_accession]['Experiment'].values.tolist()[0]}, ignore_index=True)
+    tab = tab.sort_values(by='process.insdc_experiment.insdc_experiment_accession')
     write_to_wb(workbook, tab_name, tab)
 
 
