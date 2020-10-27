@@ -3,17 +3,11 @@ from time import sleep
 import requests as rq
 import pandas as pd
 import xml.etree.ElementTree as xm
-import xml.dom.minidom
-import openpyxl
 from openpyxl import Workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils.cell import get_column_letter
 from openpyxl import load_workbook
 import os,sys
-import wget
-import glob
 import re
-import math
 import argparse
 
 OPTIONAL_TABS = ['Imaged specimen', 'Organoid', 'Cell line', 'Image file', 'Additional reagents',
