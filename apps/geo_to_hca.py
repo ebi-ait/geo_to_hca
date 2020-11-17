@@ -520,7 +520,11 @@ def retrieve_fastq_from_experiment(fastq_map,experiment_package):
                         attributes = sra_file.attrib
                         # Check files are public and not in SRA format
                         if attributes['cluster'] == 'public':
-                            run_reads.append(sra_file)
+                            if attributes['sratoolkit']:
+                                if attributes['sratoolkit'] != '1':
+                                    run_reads.append(sra_file)
+                            else:
+                                run_reads.append(sra_file)
                     if run_reads:
                         fastq_map = new_extract_read_information(run_reads, fastq_map)
                     else:
