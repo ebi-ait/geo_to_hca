@@ -3,5 +3,3 @@ pysradb
 pandas
 openpyxl
 pyyaml
-sra-tools
-wget
