@@ -264,8 +264,8 @@ def fetch_accession_info(accessions_list: [],accession_type):
         nested_list = []
         if accession_type == 'biosample':
             for xml_content in xml_content_result:
-                nested_list.extend([get_attributes_biosample(xml_content)])
-                #nested_list.extend([get_attributes_biosample(element) for element in xml_content])
+                #nested_list.extend([get_attributes_biosample(xml_content)])
+                nested_list.extend([get_attributes_biosample(element) for element in xml_content])
         elif accession_type == 'experiment':
             for xml_content in xml_content_result:
                 for experiment_package in xml_content.findall('EXPERIMENT_PACKAGE'):
