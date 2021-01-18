@@ -15,20 +15,6 @@ from contextlib import contextmanager
 import itertools
 from itertools import chain
 
-OPTIONAL_TABS = ['Imaged specimen', 'Organoid', 'Cell line', 'Image file', 'Additional reagents',
-                 'Familial relationship']
-
-LINKINGS = {
-            'Imaged specimen': ['Imaging preparation protocol'],
-            'Organoid': ['Aggregate generation protocol', 'Differentiation protocol'],
-            'Cell line': ['Dissociation protocol', 'Enrichment protocol', 'Ipsc induction protocol'],
-            'Image file': ['Imaging protocol', 'Imaging protocol - Channel', 'Imaging protocol - Probe']
-            }
-
-# TODO: Integrate tool with the Schema-Template-Generator's ability to generate templates from YAML instead of having
-# TODO: the full template in the repo
-
-
 class NotFoundSRA(Exception):
     """
     Sub-class for Exception to handle 400 error status codes.
@@ -619,7 +605,6 @@ def get_empty_df(workbook,tab_name):
     tab = pd.DataFrame(columns=cols)
     return tab
 
-
 def write_to_wb(workbook: Workbook, tab_name: str, tab_content: pd.DataFrame) -> None:
     """
     Write the tab to the active workbook.
@@ -649,7 +634,6 @@ def write_to_wb(workbook: Workbook, tab_name: str, tab_content: pd.DataFrame) ->
         for i in range(len(tab_content[key.value])):
             worksheet[f"{get_column_letter(index + 1)}{i + row_not_filled}"] = list(tab_content[key.value])[i]
 
-
 def get_sequence_file_tab_xls(SRP_df,workbook,tab_name):
     tab = get_empty_df(workbook,tab_name)
     for index,row in SRP_df.iterrows():
@@ -666,7 +650,6 @@ def get_sequence_file_tab_xls(SRP_df,workbook,tab_name):
                           'process.process_core.process_id':row['Run']}, ignore_index=True)
     tab = tab.sort_values(by='sequence_file.insdc_run_accessions')
     return tab
-
 
 def get_cell_suspension_tab_xls(SRP_df,workbook,out_file,tab_name):
     tab = get_empty_df(workbook, tab_name)
@@ -702,14 +685,14 @@ def poolcontext(*args, **kwargs):
     yield pool
     pool.terminate()
 
-def get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,out_file,tab_name):
+def get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,nthreads,tab_name):
     tab = get_empty_df(workbook, tab_name)
     biosample_accessions = list(set(list(srp_metadata_update['BioSample'])))
     attribute_lists = fetch_accession_info(biosample_accessions,accession_type='biosample')
     results = None
     if attribute_lists is not None:
         try:
-            with poolcontext(processes=1) as pool:
+            with poolcontext(processes=nthreads) as pool:
                 results = pool.map(partial(process_specimen_from_organism, srp_metadata_update=srp_metadata_update), attribute_lists)
         except KeyboardInterrupt:
             print("Process has been interrupted.")
@@ -918,7 +901,7 @@ def delete_unused_worksheets(workbook: Workbook) -> None:
             del workbook[worksheet_name]
             if worksheet_name in LINKINGS:
                 for linked_sheet in LINKINGS[worksheet_name]:
-                    if worksheet_name != 'Dissociation protocol' and worksheet_name != 'Enrichment protocol' and empty_worksheet(workbook[linked_sheet]):
+                    if empty_worksheet(workbook[linked_sheet]):
                         del workbook[linked_sheet]
 
 def list_str(values):
@@ -945,6 +928,8 @@ def main():
     parser.add_argument('--accession',type=str,help='accession (str): either GEO or SRA accession')
     parser.add_argument('--accession_list',type=list_str,help='accession list (comma separated)')
     parser.add_argument('--input_file',type=check_file,help='optional path to tab-delimited input .txt file')
+    parser.add_argument('--nthreads',type=int,default=1,
+                        help='number of multiprocessing processes to use')
     parser.add_argument('--template',default="docs/hca_template.xlsx",
                         help='path to an HCA spreadsheet template (xlsx)')
     parser.add_argument('--header_row',type=int,default=4,
@@ -1051,7 +1036,7 @@ def main():
 
             print(f"Getting Specimen from Organism tab")
             # get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions
-            get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,out_file,tab_name="Specimen from organism")
+            get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,args.nthreads,tab_name="Specimen from organism")
 
             print(f"Getting Library preparation protocol tab")
             # get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions
@@ -1086,9 +1071,6 @@ def main():
                 get_project_funders_tab_xls(workbook,tab_name="Project - Funders",project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Funders attribute error with GEO project {accession}')
-
-        # Make the spreadsheet more readable by deleting all the unused OPTIONAL_TABS and unused linked protocols
-        delete_unused_worksheets(workbook)
 
         # Done
         print(f"Done. Saving workbook to excel file")
