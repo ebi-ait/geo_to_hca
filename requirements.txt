@@ -3,3 +3,5 @@ pysradb
 pandas
 openpyxl
 pyyaml
+contextlib
+itertools

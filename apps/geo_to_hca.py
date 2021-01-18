@@ -80,7 +80,7 @@ class SraUtils:
         return pd.read_csv(srp_metadata_url)
 
     @staticmethod
-    def srr_fastq(srr_accessions):
+    def get_fastq(srr_accessions):
         sleep(0.5)
         url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}'
         srr_metadata_url = rq.get(url)
@@ -207,42 +207,57 @@ def get_fastq_from_ENA(srp_accession):
         request_url= f'http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession={srp_accession}&result=read_run&fields=run_accession,fastq_ftp'
         fastq_results = pd.read_csv(request_url, delimiter='\t')
         fastq_map = {list(fastq_results['run_accession'])[i]: get_reads(list(fastq_results['fastq_ftp'])[i]) for i in range(0, len(list(fastq_results['run_accession'])))}
-        if len(fastq_map[list(fastq_results['run_accession'])[0]]) < 2:
-            fastq_map = {list(fastq_results['run_accession'])[i]: [] for i in range(0, len(list(fastq_results['run_accession'])))}
-            return fastq_map,None
-        else:
-            available = 'yes'
-            return fastq_map,available
+        return fastq_map
     except:
-        fastq_map = {list(fastq_results['run_accession'])[i]: [] for i in range(0, len(list(fastq_results['run_accession'])))}
-        return fastq_map,None
+        return None
+
+def extract_read_info(read_values,accession,fastq_map):
+    if "--read1PairFiles" not in read_values or "--read2PairFiles" not in read_values:
+        return fastq_map
+    else:
+        read_info_list = read_values.strip().split('--')[1:]
+        for read_info in read_info_list:
+            read_info = read_info.strip()
+            split_read = read_info.split("=")
+            if 'fastq.gz' in split_read[1]:
+                if accession in fastq_map.keys():
+                    fastq_map[accession].append(split_read[1])
+                else:
+                    fastq_map[accession] = [split_read[1]]
+    return fastq_map
+
+def get_fastq_from_SRA(srr_accessions):
+    xml_content, content, url = SraUtils.get_fastq(srr_accessions)
+    if xml_content is None:
+        fastq_map = None
+    else:
+        experiment_packages = parse_xml(xml_content)
+        for experiment_package in experiment_packages:
+            try:
+                fastq_map = get_file_names_from_SRA(experiment_package)
+            except:
+                continue
+    return fastq_map
+
+def test_number_files(fastq_map):
+    if fastq_map is not None:
+        test_number_files = [len(fastq_map[accession]) < 2 for accession in fastq_map.keys()]
+        if all(test_number_files) is True:
+            fastq_map = None
+        elif any(test_number_files) is True:
+            print("Fastq file names for only some of the SRA run accessions are not available.")
+    return fastq_map
 
 def fetch_fastq_names(srp_accession, srr_accessions):
     # Try fetching the fstq file names from ENA using the run accession
-    fastq_map, available = get_fastq_from_ENA(srp_accession)
+    fastq_map = get_fastq_from_ENA(srp_accession)
+    fastq_map = test_number_files(fastq_map)
     # If fastq files are not available in ENA, try searching in SRA:
-    if available is None:
+    if fastq_map is None:
         # First send a request for info. about the list of SRA accessions from SRA
-        xml_content,content,url = SraUtils.srr_fastq(srr_accessions)
-        # If no xml file is available for the run accessions, print an error message
-        if xml_content is None or content is None:
-            print("Error parsing xml for run accessions (xml.etree.ElementTree.ParseError) from SRA DB; cannot get fastq file names from SRA due to error in xml")
-            print("Printing url for manual debugging: %s" % (url))
-            available = None
-        # Else, look for fastq files in the xml. This is currently a test and will only return True if a fastq file url is found
-        # and False if it is not. NCBI SRA is moving towards providing only SRA objects or BAM files rather than fastq files.
-        # Therefore we should likely deprecate the function to search for fastq files in SRA.
-        # However, I want to test for potential edges cases where fastq files can still be found and record these.
-        else:
-            fastq_map = {}
-            experiment_packages = parse_xml(xml_content)
-            fastq_list = retrieve_fastq_from_experiment(experiment_packages)
-            if True in fastq_list:
-                print('SRA fastq files have been found. Please speak to Ami about this')
-                sys.exit()
-            else:
-                available = None
-    return fastq_map, available
+        fastq_map = get_fastq_from_SRA(srr_accessions)
+        fastq_map = test_number_files(fastq_map)
+    return fastq_map
 
 def fetch_accession_info(accessions_list: [],accession_type):
     xml_content_result,size = SraUtils.get_content(accessions_list,accession_type=accession_type)
@@ -250,7 +265,6 @@ def fetch_accession_info(accessions_list: [],accession_type):
         nested_list = []
         if accession_type == 'biosample':
             for xml_content in xml_content_result:
-                #nested_list.extend([get_attributes_biosample(xml_content)])
                 nested_list.extend([get_attributes_biosample(element) for element in xml_content])
         elif accession_type == 'experiment':
             for xml_content in xml_content_result:
@@ -473,40 +487,20 @@ def parse_xml(xml_content):
     for experiment_package in xml_content.findall('EXPERIMENT_PACKAGE'):
         yield experiment_package
 
-def new_extract_read_information(sra_file_list, fastq_map):
-    i = 1
-    for read_info in sra_file_list:
-        for alternative in list(read_info):
-            if 'url' in alternative.attrib:
-                if "fastq" in alternative.attrib['url']:
-                    #Asumes there is an order R1, R2, I1, I2
-                    filename = alternative.attrib['url'].split('/')[-1]
-                    accession = alternative.attrib['url'].split('/')[-2]
-                    if accession not in fastq_map.keys():
-                        fastq_map[accession] = {}
-                    fastq_map[accession][f'read{i}PairFiles'] = filename
-                    i += 1
-                    break
-                elif "fastq" not in alternative.attrib['url']:
-                    filename = ''
-                    accession = alternative.attrib['url'].split('/')[-2]
-                    if accession not in fastq_map.keys():
-                        fastq_map[accession] = {}
-                    fastq_map[accession][f'read{i}PairFiles'] = filename
-                    i += 1
-                    break
+def get_file_names_from_SRA(experiment_package):
+    fastq_map = {}
+    run_set = experiment_package.find('RUN_SET')
+    for run in run_set:
+        try:
+            accession = run.attrib['accession']
+            run_attributes = run.find('RUN_ATTRIBUTES')
+            for attribute in run_attributes:
+                if attribute.find('TAG').text == 'options':
+                    read_values = attribute.find('VALUE').text
+                    fastq_map = extract_read_info(read_values,accession,fastq_map)
+        except:
+            continue
     return fastq_map
-
-def get_file_names_from_SRA(attributes):
-    # Check files are public and not in SRA format
-    if attributes['cluster'] == 'public':
-        if 'fastq' in attributes['url']:
-            #file_name = attributes['url'].split('/')[-1]
-            #accession = attributes['url'].split('/')[-2]
-            return True
-        else:
-            return False
-    return False
 
 def retrieve_fastq_from_experiment(experiment_packages):
     fastq_list = []
@@ -553,10 +547,7 @@ def get_attributes_library_protocol(experiment_package):
 
 def get_lane_index(file):
     result = re.search('_L[0-9]{3}', file)
-    if result:
-        return True
-    else:
-        return None
+    return result
 
 def get_file_index(file):
     if "_I1" in file or "_R3" in file or "_3" in file:
@@ -587,9 +578,12 @@ def integrate_metadata(srp_metadata,fastq_map,cols):
                 # fastq file names obtained from ENA. It will not incorporate lane indices if found currently.
                 lane_index = get_lane_index(file)
                 if lane_index:
-                    print("Lane indices are available: please speak to Ami about this.")
+                    g = lane_index.group()
+                    lane_index = g.split("_")[1]
+                else:
+                    lane_index = ''
                 new_row = row.to_list()
-                new_row.extend([file,get_file_index(file),''])
+                new_row.extend([file,get_file_index(file),lane_index])
                 a_series = pd.Series(new_row)
                 srp_metadata_update = srp_metadata_update.append(a_series, ignore_index=True)
     cols.extend(['fastq_name', 'file_index', 'lane_index'])
@@ -1063,9 +1057,9 @@ def main():
 
             # get fastq file names
             print(f"Fetching fastq file names for SRA study ID: {srp_accession}")
-            fastq_map, available = fetch_fastq_names(srp_accession, list(srp_metadata['Run']))
+            fastq_map = fetch_fastq_names(srp_accession, list(srp_metadata['Run']))
 
-            if not available:
+            if fastq_map is None:
 
                 print(f"Both Read1 and Read2 fastq files are not available for SRA study ID: {srp_accession}")
                 results[accession] = {"SRA Study available": "yes"}
