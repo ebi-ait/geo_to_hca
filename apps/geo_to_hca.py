@@ -537,19 +537,18 @@ def get_attributes_biosample(element):
 
 def get_attributes_library_protocol(experiment_package):
     experiment_id = experiment_package.find('EXPERIMENT').attrib['accession']
-    library_descriptors = experiment_package.find('EXPERIMENT').find('LIBRARY_DESCRIPTOR')
-    if library_descriptors:
-        if library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL'):
-            library_construction_protocol = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL').text
+    for experiment in experiment_package.find('EXPERIMENT'):
+        library_descriptors = experiment.find('LIBRARY_DESCRIPTOR')
+        if library_descriptors:
+            desc = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL')
+            library_construction_protocol = desc.text
         else:
-            library_construction_protocol = ""
-    else:
-        library_construction_protocol = ""
-    illumina = experiment_package.find('EXPERIMENT').find('ILLUMINA')
-    if illumina:
-        instrument = illumina.find('INSTRUMENT_MODEL').text
-    else:
-        instrument = ''
+            library_construction_protocol = ''
+        illumina = experiment.find('ILLUMINA')
+        if illumina:
+            instrument = illumina.find('INSTRUMENT_MODEL').text
+        else:
+            instrument = ''
     return [experiment_id,library_construction_protocol,instrument]
 
 def get_lane_index(file):
@@ -723,38 +722,94 @@ def get_library_protocol_tab_xls(SRP_df,workbook,tab_name):
                               'library_preparation_protocol.nucleic_acid_source':'single cell'}
             library_protocol_dict[experiment_accession] = {"library_protocol_id":library_protocol_id,"library_protocol_description":library_protocol}
             if "10X" in library_protocol:
-                if "v.2" or "v2" in library_protocol:
+                if "v.2" or "v2" or 'V2' or 'V.2' in library_protocol:
+                    if "3'" in library_protocol:
+                        tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
+                                        'library_preparation_protocol.cell_barcode.barcode_offset': 0,
+                                        'library_preparation_protocol.cell_barcode.barcode_length': 16,
+                                        'library_preparation_protocol.library_construction_method.text':"10X 3' v2 sequencing",
+                                        'library_preparation_protocol.library_construction_kit.retail_name': 'Single Cell 3’ Reagent Kit v2',
+                                        'library_preparation_protocol.library_construction_kit.manufacturer': '10X Genomics',
+                                        'library_preparation_protocol.end_bias':'3 prime tag',
+                                        'library_preparation_protocol.primer':'poly-dT',
+                                        'library_preparation_protocol.strand':'first',
+                                        'library_preparation_protocol.umi_barcode.barcode_read':'Read1',
+                                        'library_preparation_protocol.umi_barcode.barcode_offset':16,
+                                        'library_preparation_protocol.umi_barcode.barcode_length':10})
+                    elif "5'" in library_protocol:
+                        print("Please let Ami know that you have come across a 10X v2 5' dataset")
+                        tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
+                                        'library_preparation_protocol.cell_barcode.barcode_offset': 0,
+                                        'library_preparation_protocol.cell_barcode.barcode_length': 16,
+                                        'library_preparation_protocol.library_construction_method.text':"10X 5' v2 sequencing",
+                                        'library_preparation_protocol.library_construction_kit.retail_name': 'Single Cell 5’ Reagent Kit v2',
+                                        'library_preparation_protocol.library_construction_kit.manufacturer': '10X Genomics',
+                                        'library_preparation_protocol.end_bias':'5 prime tag',
+                                        'library_preparation_protocol.primer':'poly-dT',
+                                        'library_preparation_protocol.strand':'first',
+                                        'library_preparation_protocol.umi_barcode.barcode_read':'Read1',
+                                        'library_preparation_protocol.umi_barcode.barcode_offset':16,
+                                        'library_preparation_protocol.umi_barcode.barcode_length':10})
+                elif "v.3" or "v3" or 'V3' or 'V.3' in library_protocol:
                     tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
-                                     'library_preparation_protocol.cell_barcode.barcode_offset': 0,
-                                     'library_preparation_protocol.cell_barcode.barcode_length': 16,
-                                     'library_preparation_protocol.library_construction_method.text':"10X 3' v2 sequencing",
-                                     'library_preparation_protocol.library_construction_kit.retail_name': 'Single Cell 3’ Reagent Kit v2',
-                                     'library_preparation_protocol.library_construction_kit.manufacturer': '10X Genomics',
-                                     'library_preparation_protocol.end_bias':'3 prime tag',
-                                     'library_preparation_protocol.primer':'poly-dT',
-                                     'library_preparation_protocol.strand':'first',
-                                     'library_preparation_protocol.umi_barcode.barcode_read':'Read1',
-                                     'library_preparation_protocol.umi_barcode.barcode_offset':16,
-                                     'library_preparation_protocol.umi_barcode.barcode_length':10})
-                elif "v.3" or "v3" in library_protocol:
-                    tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': '',
-                                    'library_preparation_protocol.cell_barcode.barcode_offset': '',
-                                    'library_preparation_protocol.cell_barcode.barcode_length': '',
+                                    'library_preparation_protocol.cell_barcode.barcode_offset': 0,
+                                    'library_preparation_protocol.cell_barcode.barcode_length': 16,
                                     'library_preparation_protocol.library_construction_method.text':"10X 3' v3 sequencing",
                                     'library_preparation_protocol.library_construction_kit.retail_name': 'Single Cell 3’ Reagent Kit v3',
                                     'library_preparation_protocol.library_construction_kit.manufacturer': '10X Genomics',
+                                    'library_preparation_protocol.end_bias':'3 prime tag',
+                                    'library_preparation_protocol.primer':'poly-dT',
+                                    'library_preparation_protocol.strand':'first',
+                                    'library_preparation_protocol.umi_barcode.barcode_read':'"Read1',
+                                    'library_preparation_protocol.umi_barcode.barcode_offset':16,
+                                    'library_preparation_protocol.umi_barcode.barcode_length':12})
+                elif "v.1" or "v1" or 'V1' or 'V.1' in library_protocol:
+                    tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
+                                    'library_preparation_protocol.cell_barcode.barcode_offset': 0,
+                                    'library_preparation_protocol.cell_barcode.barcode_length': 14,
+                                    'library_preparation_protocol.library_construction_method.text':"10X v1 sequencing",
+                                    'library_preparation_protocol.library_construction_kit.retail_name': 'Single Cell Reagent Kit v1',
+                                    'library_preparation_protocol.library_construction_kit.manufacturer': '10X Genomics',
                                     'library_preparation_protocol.end_bias':'',
-                                    'library_preparation_protocol.primer':'',
-                                    'library_preparation_protocol.strand':'',
-                                    'library_preparation_protocol.umi_barcode.barcode_read':'',
-                                    'library_preparation_protocol.umi_barcode.barcode_offset':'',
-                                    'library_preparation_protocol.umi_barcode.barcode_length':''})
+                                    'library_preparation_protocol.primer':'poly-dT',
+                                    'library_preparation_protocol.strand':'first',
+                                    'library_preparation_protocol.umi_barcode.barcode_read':'Read1',
+                                    'library_preparation_protocol.umi_barcode.barcode_offset':14,
+                                    'library_preparation_protocol.umi_barcode.barcode_length':10})
                 else:
                     tmp_dict.update({'library_preparation_protocol.library_construction_method.text': "10X sequencing",
                                      'library_preparation_protocol.library_construction_kit.manufacturer': '10X Genomics'})
-            tab = tab.append(tmp_dict,ignore_index=True)
-        else:
-            tab = tab
+                tab = tab.append(tmp_dict, ignore_index=True)
+            elif 'Drop-seq' or 'drop-seq' or 'DropSeq' or 'Dropseq' in library_protocol:
+                tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
+                                 'library_preparation_protocol.cell_barcode.barcode_offset': 0,
+                                 'library_preparation_protocol.cell_barcode.barcode_length': 12,
+                                 'library_preparation_protocol.library_construction_method.text': "Drop-seq",
+                                 'library_preparation_protocol.library_construction_kit.retail_name': '',
+                                 'library_preparation_protocol.library_construction_kit.manufacturer': '',
+                                 'library_preparation_protocol.end_bias': '',
+                                 'library_preparation_protocol.primer': 'poly-dT',
+                                 'library_preparation_protocol.strand': 'first',
+                                 'library_preparation_protocol.umi_barcode.barcode_read': 'Read1',
+                                 'library_preparation_protocol.umi_barcode.barcode_offset': 12,
+                                 'library_preparation_protocol.umi_barcode.barcode_length': 8})
+                tab = tab.append(tmp_dict, ignore_index=True)
+            elif 'Smart-seq' or 'smart-seq' or 'Smartseq' or 'SmartSeq' or 'plate' or 'Plate' in library_protocol:
+                tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': '',
+                                 'library_preparation_protocol.cell_barcode.barcode_offset': '',
+                                 'library_preparation_protocol.cell_barcode.barcode_length': '',
+                                 'library_preparation_protocol.library_construction_method.text': 'Smart-seq2',
+                                 'library_preparation_protocol.library_construction_kit.retail_name': '',
+                                 'library_preparation_protocol.library_construction_kit.manufacturer': '',
+                                 'library_preparation_protocol.end_bias': 'full length',
+                                 'library_preparation_protocol.primer': 'poly-dT',
+                                 'library_preparation_protocol.strand': 'unstranded',
+                                 'library_preparation_protocol.umi_barcode.barcode_read': '',
+                                 'library_preparation_protocol.umi_barcode.barcode_offset': '',
+                                 'library_preparation_protocol.umi_barcode.barcode_length': ''})
+                tab = tab.append(tmp_dict, ignore_index=True)
+            else:
+                tab = tab
         if library_protocol in library_protocol_set:
             tab = tab
             for key in library_protocol_dict.keys():
