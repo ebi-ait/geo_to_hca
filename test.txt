@@ -1,9 +1,0 @@
-Fetching study metadata for SRA study ID: SRP229590
-Fetching fastq file names for SRA study ID: SRP229590
-Found fastq files for SRA study ID: SRP229590
-Integrating study metadata and fastq file names info.
-          0                    1     ...   2798 2799
-0  SRR10433201  2020-01-07 18:25:40  ...  read2     
-
-[1 rows x 2800 columns]
-Getting Sequence file tab
