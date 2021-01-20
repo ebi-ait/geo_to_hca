@@ -15,52 +15,19 @@ from contextlib import contextmanager
 import itertools
 from itertools import chain
 
+from handle_errors import NotFoundSRA,NotFoundENA
+
 STATUS_ERROR_CODE = 400
 
-class NotFoundSRA(Exception):
-    """
-    Sub-class for Exception to handle 400 error status codes.
-    """
-    def __init__(self, response, accession_list):
-        self.response = response
-        self.accessions = accession_list
-        self.error = self.parse_xml_error()
-
-    def parse_xml_error(self):
-        root = xm.fromstring(self.response.content)
-        return root.find('ERROR').text  # Return the string for the error returned by Efetch
-
-    def __str__(self):
-        if len(self.accessions) > 1:
-            accession_string = '\n'.join(self.accessions)
-        else:
-            accession_string = self.accessions
-        return (f"\nStatus code of the request: {self.response.status_code}.\n"
-                f"Error as returned by SRA:\n{self.error}"
-                f"The provided accessions were:\n{accession_string}\n\n")
-
-class NotFoundENA(Exception):
-    """
-    Sub-class for Exception to handle 400 error status codes.
-    """
-    def __init__(self, response, title):
-        self.response = response
-        self.title = title
-        self.error = self.parse_xml_error()
-
-    def parse_xml_error(self):
-        root = xm.fromstring(self.response.content)
-        return root.find('ERROR').text  # Return the string for the error returned by Efetch
-
-    def __str__(self):
-        return (f"\nStatus code of the request: {self.response.status_code}.\n"
-                f"Error as returned by ENA:\n{self.error}"
-                f"The provided project title or name was:\n{self.title}\n\n")
-
 class SraUtils:
-
+    """
+    Class to handle requests from NCBI SRA database via SRAweb() or NCBI eutils.
+    """
     @staticmethod
-    def sra_accession_from_geo(geo_accession: str):
+    def sra_accession_from_geo(geo_accession: str) -> str:
+        """
+        Function to retrieve an SRA database study accession for a given input GEO accession.
+        """
         sleep(0.5)
         try:
             srp = SRAweb().gse_to_srp(geo_accession)
@@ -77,12 +44,20 @@ class SraUtils:
 
     @staticmethod
     def srp_metadata(srp_accession: str) -> pd.DataFrame:
+        """
+        Function to retrieve a dataframe with multiple lists of experimental and sample accessions
+        associated with a particular SRA study accession from the SRA database.
+        """
         sleep(0.5)
         srp_metadata_url = f'http://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term={srp_accession}'
         return pd.read_csv(srp_metadata_url)
 
     @staticmethod
-    def get_fastq(srr_accessions):
+    def get_fastq(srr_accessions: []) -> object:
+        """
+        Function to retrieve an xml file containing information associated with a list of NCBI SRA run accessions.
+        In particular, the xml contains the paths to the data (if available) in fastq or other format.
+        """
         sleep(0.5)
         url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}'
         srr_metadata_url = rq.get(url)
@@ -92,12 +67,16 @@ class SraUtils:
             xml = xm.fromstring(srr_metadata_url.content)
             xml_content = srr_metadata_url.content
         except:
-            xml = None
             xml_content = None
-        return xml,xml_content,url
+        return xml_content
 
     @staticmethod
-    def split_list(accessions, n):
+    """
+    Function to split a list of SRA run accessions into a nested list containing smaller lists
+    of SRA run accessions of length n. This is because the request will not work with lists of
+    accessions approximately > 100 accessions in length. Returns the nested list.
+    """
+    def split_list(accessions: [], n: int) -> []:
         parts_list = []
         for i in range(0, len(accessions), n):
             part = accessions[i:i + n]
@@ -106,7 +85,11 @@ class SraUtils:
         return parts_list
 
     @staticmethod
-    def request_info(accessions,accession_type):
+    def request_info(accessions: [],accession_type: str) -> object:
+        """
+        Function which sends a request to NCBI SRA database to get an xml file with metadata about a
+        given list of biosample or experiment accessions. The xml contains various metadata fields.
+        """
         if accession_type == 'biosample':
             url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=biosample&id={",".join(accessions)}'
         if accession_type == 'experiment':
@@ -117,7 +100,13 @@ class SraUtils:
         return xm.fromstring(sra_url.content)
 
     @staticmethod
-    def get_content(accessions,accession_type):
+    def get_content(accessions: [],accession_type: str) -> [],str:
+    """
+    Function to decide which accessions to send per request, if more than 1 is needed, to the SRA database
+    via the request_info function. This decision is made based on the length of the accession list. If the accession list
+    is >100 accessions in length, the list will first be split into a nested list of smaller
+    lists of accessions and a nested list will be returned. Otherwise, an unnested list will be returned.
+    """
         if len(accessions) < 100:
             xml = SraUtils.request_info(accessions,accession_type=accession_type)
             size = 'small'
@@ -132,7 +121,10 @@ class SraUtils:
             return xmls,size
 
     @staticmethod
-    def srp_bioproject(bioproject_accession):
+    def srp_bioproject(bioproject_accession: str):
+        """
+        Function to request metadata at the project level given an SRA Bioproject accession.
+        """
         sleep(0.5)
         srp_bioproject_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=bioproject&id={bioproject_accession}')
         if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
@@ -140,14 +132,20 @@ class SraUtils:
         return xm.fromstring(srp_bioproject_url.content)
 
     @staticmethod
-    def pubmed_id(project_pubmed_id):
+    def pubmed_id(project_pubmed_id: str):
+        """
+        Function to request metadata at the publication level given a pubmed ID.
+        """
         sleep(0.5)
         pubmed_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
         if pubmed_url.status_code == STATUS_ERROR_CODE:
             raise NotFoundSRA(pubmed_url, project_pubmed_id)
         return xm.fromstring(pubmed_url.content)
 
-def fetch_srp_accession(geo_accession: str):
+def fetch_srp_accession(geo_accession: str) -> str:
+    """
+    Function to retrieve an SRA study accession given a GEO accession.
+    """
     srp = SraUtils.sra_accession_from_geo(geo_accession)
     if not srp.empty:
         if srp.shape[0] == 1:
@@ -193,10 +191,16 @@ def fetch_srp_accession(geo_accession: str):
     return srp
 
 def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
+    """
+    Function to get various metadata from the SRA database given an SRA study accession.
+    """
     srp_metadata_df = SraUtils.srp_metadata(srp_accession)
     return srp_metadata_df
 
-def get_reads(ftp_path):
+def get_reads(ftp_path: str) -> []:
+    """
+    Function to extract single fastq file names from a string containing multiple fastq file paths.
+    """
     try:
         read_files = ftp_path.split(';')
         read_files = [file.split("/")[-1] for file in read_files]
@@ -204,7 +208,13 @@ def get_reads(ftp_path):
         read_files = []
     return read_files
 
-def get_fastq_from_ENA(srp_accession):
+def get_fastq_from_ENA(srp_accession: str) -> {}:
+    """
+    Function to retrieve fastq file paths from ENA given an SRA study accession. The request returns a
+    dataframe with a list of run accessions and their associated fastq file paths. The multiple file paths for
+    each run are stored in a single string. This string is then stored in a dictionary with the associated
+    run accessions as keys.
+    """
     try:
         request_url= f'http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession={srp_accession}&result=read_run&fields=run_accession,fastq_ftp'
         fastq_results = pd.read_csv(request_url, delimiter='\t')
@@ -213,7 +223,11 @@ def get_fastq_from_ENA(srp_accession):
     except:
         return None
 
-def extract_read_info(read_values,accession,fastq_map):
+def extract_read_info(read_values:str,accession:str,fastq_map:{}) -> {}:
+    """
+    Function to extract a list of fastq file names from a str containing multiple file paths associated
+    with a single run accession.
+    """
     if "--read1PairFiles" not in read_values or "--read2PairFiles" not in read_values:
         return fastq_map
     else:
@@ -228,8 +242,13 @@ def extract_read_info(read_values,accession,fastq_map):
                     fastq_map[accession] = [split_read[1]]
     return fastq_map
 
-def get_fastq_from_SRA(srr_accessions):
-    xml_content, content, url = SraUtils.get_fastq(srr_accessions)
+def get_fastq_from_SRA(srr_accessions: []) -> {}:
+    """
+    Function to parse the xml output following a request for run accession metadata to the NCBI SRA database.
+    A list of SRA run accessions is given as input to the request. The fastq file paths are extracted from
+    this xml and the file names are added to a dictionary with the associated run accessions as keys (fastq_map).
+    """
+    xml_content = SraUtils.get_fastq(srr_accessions)
     if not xml_content:
         fastq_map = None
     else:
