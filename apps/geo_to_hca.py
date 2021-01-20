@@ -15,6 +15,8 @@ from contextlib import contextmanager
 import itertools
 from itertools import chain
 
+STATUS_ERROR_CODE = 400
+
 class NotFoundSRA(Exception):
     """
     Sub-class for Exception to handle 400 error status codes.
@@ -52,7 +54,7 @@ class NotFoundENA(Exception):
 
     def __str__(self):
         return (f"\nStatus code of the request: {self.response.status_code}.\n"
-                f"Error as returned by SRA:\n{self.error}"
+                f"Error as returned by ENA:\n{self.error}"
                 f"The provided project title or name was:\n{self.title}\n\n")
 
 class SraUtils:
@@ -84,7 +86,7 @@ class SraUtils:
         sleep(0.5)
         url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}'
         srr_metadata_url = rq.get(url)
-        if srr_metadata_url.status_code == 400:
+        if srr_metadata_url.status_code == STATUS_ERROR_CODE:
             raise NotFoundSRA(srr_metadata_url, srr_accessions)
         try:
             xml = xm.fromstring(srr_metadata_url.content)
@@ -99,7 +101,7 @@ class SraUtils:
         parts_list = []
         for i in range(0, len(accessions), n):
             part = accessions[i:i + n]
-            if part is not None:
+            if part:
                 parts_list.append(part)
         return parts_list
 
@@ -110,7 +112,7 @@ class SraUtils:
         if accession_type == 'experiment':
             url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(accessions)}'
         sra_url = rq.get(url)
-        if sra_url.status_code == 400:
+        if sra_url.status_code == STATUS_ERROR_CODE:
             raise NotFoundSRA(sra_url, accessions)
         return xm.fromstring(sra_url.content)
 
@@ -133,7 +135,7 @@ class SraUtils:
     def srp_bioproject(bioproject_accession):
         sleep(0.5)
         srp_bioproject_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=bioproject&id={bioproject_accession}')
-        if srp_bioproject_url.status_code == 400:
+        if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
             raise NotFoundSRA(srp_bioproject_url, bioproject_accession)
         return xm.fromstring(srp_bioproject_url.content)
 
@@ -141,13 +143,13 @@ class SraUtils:
     def pubmed_id(project_pubmed_id):
         sleep(0.5)
         pubmed_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
-        if pubmed_url.status_code == 400:
+        if pubmed_url.status_code == STATUS_ERROR_CODE:
             raise NotFoundSRA(pubmed_url, project_pubmed_id)
         return xm.fromstring(pubmed_url.content)
 
 def fetch_srp_accession(geo_accession: str):
     srp = SraUtils.sra_accession_from_geo(geo_accession)
-    if srp is not None:
+    if not srp.empty:
         if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
         elif srp.shape[0] > 1:
@@ -165,12 +167,12 @@ def fetch_srp_accession(geo_accession: str):
                         if answer.lower() in ['n', "no"]:
                             print("SRA study accession not found")
                             srp = None
-    elif srp is None:
+    else:
         answer = input("Could not recognise GEO accession %s; is it a GEO Superseries? If yes, please enter the project GEO accession manually here (GSExxxxxx) or type exit for program exit: " % (geo_accession))
         srp = SraUtils.sra_accession_from_geo(answer.upper())
-        if srp is None:
+        if not srp:
             print("GEO accession still not recognised; exiting program")
-        elif srp is not None:
+        else:
             if srp.shape[0] == 1:
                 srp = srp.iloc[0]["study_accession"]
             elif srp.shape[0] > 1:
@@ -228,7 +230,7 @@ def extract_read_info(read_values,accession,fastq_map):
 
 def get_fastq_from_SRA(srr_accessions):
     xml_content, content, url = SraUtils.get_fastq(srr_accessions)
-    if xml_content is None:
+    if not xml_content:
         fastq_map = None
     else:
         experiment_packages = parse_xml(xml_content)
@@ -240,7 +242,7 @@ def get_fastq_from_SRA(srr_accessions):
     return fastq_map
 
 def test_number_files(fastq_map):
-    if fastq_map is not None:
+    if fastq_map:
         test_number_files = [len(fastq_map[accession]) < 2 for accession in fastq_map.keys()]
         if all(test_number_files) is True:
             fastq_map = None
@@ -253,7 +255,7 @@ def fetch_fastq_names(srp_accession, srr_accessions):
     fastq_map = get_fastq_from_ENA(srp_accession)
     fastq_map = test_number_files(fastq_map)
     # If fastq files are not available in ENA, try searching in SRA:
-    if fastq_map is None:
+    if not fastq_map:
         # First send a request for info. about the list of SRA accessions from SRA
         fastq_map = get_fastq_from_SRA(srr_accessions)
         fastq_map = test_number_files(fastq_map)
@@ -307,7 +309,7 @@ def fetch_bioproject(bioproject_accession: str):
         if project_title:
             print("project title is: %s" % (project_title))
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
-            if url.status_code == 400:
+            if url.status_code == STATUS_ERROR_CODE:
                 raise NotFoundENA(url, project_title)
             else:
                 xml_content = xm.fromstring(url.content)
@@ -317,7 +319,7 @@ def fetch_bioproject(bioproject_accession: str):
                     for result in result_list:
                         results.append(result)
                     journal_title = results[0].find("journalTitle").text
-                    if journal_title is None or journal_title == '':
+                    if not journal_title or journal_title == '':
                         project_pubmed_id = ''
                         print("no publication results for project title in ENA")
                     else:
@@ -326,7 +328,7 @@ def fetch_bioproject(bioproject_accession: str):
                             project_pubmed_id = results[0].find("pmid").text
                         else:
                             journal_title = results[1].find("journalTitle").text
-                            if journal_title is None or journal_title == '':
+                            if not journal_title or journal_title == '':
                                 project_pubmed_id = ''
                                 print("no publication results for project title in ENA")
                             else:
@@ -335,7 +337,7 @@ def fetch_bioproject(bioproject_accession: str):
                                     project_pubmed_id = results[1].find("pmid").text
                                 else:
                                     journal_title = results[2].find("journalTitle").text
-                                    if journal_title is None or journal_title == '':
+                                    if not journal_title or journal_title == '':
                                         project_pubmed_id = ''
                                         print("no publication results for project title in ENA")
                                     else:
@@ -352,7 +354,7 @@ def fetch_bioproject(bioproject_accession: str):
             if project_name:
                 print("project name is %s:" % (project_name))
                 url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
-                if url.status_code == 400:
+                if url.status_code == STATUS_ERROR_CODE:
                     raise NotFoundENA(url, project_name)
                 else:
                     xml_content = xm.fromstring(url.content)
@@ -362,7 +364,7 @@ def fetch_bioproject(bioproject_accession: str):
                         for result in result_list:
                             results.append(result)
                         journal_title = results[0].find("journalTitle").text
-                        if journal_title is None or journal_title == '':
+                        if not journal_title or journal_title == '':
                             project_pubmed_id = ''
                             print("no publication results for project name in ENA")
                         else:
@@ -371,7 +373,7 @@ def fetch_bioproject(bioproject_accession: str):
                                 project_pubmed_id = results[0].find("pmid").text
                             else:
                                 journal_title = results[1].find("journalTitle").text
-                                if journal_title is None or journal_title == '':
+                                if not journal_title or journal_title == '':
                                     project_pubmed_id = ''
                                     print("no publication results for project name in ENA")
                                 else:
@@ -380,7 +382,7 @@ def fetch_bioproject(bioproject_accession: str):
                                         project_pubmed_id = results[1].find("pmid").text
                                     else:
                                         journal_title = results[2].find("journalTitle").text
-                                        if journal_title is None or journal_title == '':
+                                        if not journal_title or journal_title == '':
                                             project_pubmed_id = ''
                                             print("no publication results for project name in ENA")
                                         else:
@@ -416,7 +418,7 @@ def fetch_pubmed(project_pubmed_id: str,iteration: int):
             print("no authors found in SRA")
         try:
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
-            if url.status_code == 400:
+            if url.status_code == STATUS_ERROR_CODE:
                 raise NotFoundENA(url, title)
             else:
                 xml_content_2 = xm.fromstring(url.content)
@@ -426,8 +428,6 @@ def fetch_pubmed(project_pubmed_id: str,iteration: int):
                 for result in result_list:
                     results.append(result)
                 author_string = results[0].find("authorString").text
-                print(author_string)
-                #doi = results[0].find("doi").text
             except:
                 authors = None
                 if iteration == 1:
@@ -461,7 +461,7 @@ def fetch_pubmed(project_pubmed_id: str,iteration: int):
         grants = None
         if iteration == 1:
             print("no grants found in SRA or ENA")
-    if grants is not None:
+    if grants:
         for grant in grants:
             try:
                 id = grant.find("GrantID").text
@@ -510,7 +510,7 @@ def retrieve_fastq_from_experiment(experiment_packages):
 
 def get_attributes_biosample(element):
     element_id = ''
-    if element.attrib is not None:
+    if element.attrib:
         element_id = element.attrib['accession']
     if element_id == '':
         for item in element.find('Ids'):
@@ -566,7 +566,7 @@ def integrate_metadata(srp_metadata,fastq_map,cols):
     srp_metadata_update = pd.DataFrame()
     for index, row in srp_metadata.iterrows():
         srr_accession = row['Run']
-        if fastq_map is None or srr_accession not in fastq_map.keys():
+        if not fastq_map or srr_accession not in fastq_map.keys():
             new_row = row.to_list()
             new_row.extend(['','',''])
             a_series = pd.Series(new_row)
@@ -683,7 +683,7 @@ def get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,nthreads,tab
     biosample_accessions = list(set(list(srp_metadata_update['BioSample'])))
     attribute_lists = fetch_accession_info(biosample_accessions,accession_type='biosample')
     results = None
-    if attribute_lists is not None:
+    if attribute_lists:
         try:
             with poolcontext(processes=nthreads) as pool:
                 results = pool.map(partial(process_specimen_from_organism, srp_metadata_update=srp_metadata_update), attribute_lists)
@@ -1041,7 +1041,7 @@ def main():
         elif 'SRP' in accession:
             srp_accession = accession
 
-        if srp_accession is None:
+        if not srp_accession:
             results[accession] = {"SRA Study available": "no"}
             results[accession].update({"fastq files available": "na"})
             print(f"No SRA study accession is available for accession {accession}")
@@ -1059,7 +1059,7 @@ def main():
             print(f"Fetching fastq file names for SRA study ID: {srp_accession}")
             fastq_map = fetch_fastq_names(srp_accession, list(srp_metadata['Run']))
 
-            if fastq_map is None:
+            if not fastq_map:
 
                 print(f"Both Read1 and Read2 fastq files are not available for SRA study ID: {srp_accession}")
                 results[accession] = {"SRA Study available": "yes"}
