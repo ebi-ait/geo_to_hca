@@ -6,12 +6,12 @@ from openpyxl import Workbook
 from openpyxl.utils.cell import get_column_letter
 from openpyxl import load_workbook
 import os,sys
-import re
 import argparse
 
-import sra_utils
-import utils
-import parse_reads
+import utils.sra_utils as sra_utils
+import utils.utils as utils
+import utils.parse_reads as parse_reads
+import utils.get_tab as get_tab
 
 """
 Define functions.
@@ -20,7 +20,7 @@ def fetch_srp_accession(geo_accession: str) -> str:
     """
     Function to retrieve an SRA study accession given a GEO accession.
     """
-    srp = SraUtils.get_srp_accession_from_geo(geo_accession)
+    srp = sra_utils.SraUtils.get_srp_accession_from_geo(geo_accession)
     if not srp.empty:
         if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
@@ -36,7 +36,7 @@ def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     """
     Function to get various metadata from the SRA database given an SRA study accession.
     """
-    srp_metadata_df = SraUtils.get_srp_metadata(srp_accession)
+    srp_metadata_df = sra_utils.SraUtils.get_srp_metadata(srp_accession)
     return srp_metadata_df
 
 def fetch_fastq_names(srp_accession: str, srr_accessions: []) -> {}:
@@ -48,7 +48,7 @@ def fetch_fastq_names(srp_accession: str, srr_accessions: []) -> {}:
     """
     Takes as input a single SRA Study accession.
     """
-    fastq_map = SraUtils.request_fastq_from_ENA(srp_accession)
+    fastq_map = parse_reads.request_fastq_from_ENA(srp_accession)
     fastq_map = utils.test_number_fastq_files(fastq_map)
     if not fastq_map:
         """
@@ -75,14 +75,14 @@ def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.
         else:
             filenames_list = fastq_map[srr_accession]
             for file in filenames_list:
-                lane_index = get_lane_index(file)
+                lane_index = parse_reads.get_lane_index(file)
                 if lane_index:
                     g = lane_index.group()
                     lane_index = g.split("_")[1]
                 else:
                     lane_index = ''
                 new_row = row.to_list()
-                new_row.extend([file,get_file_index(file),lane_index])
+                new_row.extend([file,parse_reads.get_file_index(file),lane_index])
                 a_series = pd.Series(new_row)
                 srp_metadata_update = srp_metadata_update.append(a_series, ignore_index=True)
     cols.extend(['fastq_name', 'file_index', 'lane_index'])
@@ -96,8 +96,8 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--accession',type=str,help='accession (str): either GEO or SRA accession')
-    parser.add_argument('--accession_list',type=list_str,help='accession list (comma separated)')
-    parser.add_argument('--input_file',type=check_file,help='optional path to tab-delimited input .txt file')
+    parser.add_argument('--accession_list',type=utils.check_list_str,help='accession list (comma separated)')
+    parser.add_argument('--input_file',type=utils.check_file,help='optional path to tab-delimited input .txt file')
     parser.add_argument('--nthreads',type=int,default=1,
                         help='number of multiprocessing processes to use')
     parser.add_argument('--template',default="docs/hca_template.xlsx",
@@ -226,49 +226,49 @@ def main():
             Get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Sequence file tab")
-            sequence_file_tab = get_sequence_file_tab_xls(srp_metadata_update,workbook,tab_name="Sequence file")
+            sequence_file_tab = get_tab.get_sequence_file_tab_xls(srp_metadata_update,workbook,tab_name="Sequence file")
 
             """
             Get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Cell suspension tab")
-            get_cell_suspension_tab_xls(srp_metadata_update,workbook,tab_name="Cell suspension")
+            get_tab.get_cell_suspension_tab_xls(srp_metadata_update,workbook,tab_name="Cell suspension")
 
             """
             Get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Specimen from Organism tab")
-            get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,args.nthreads,tab_name="Specimen from organism")
+            get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,args.nthreads,tab_name="Specimen from organism")
 
             """
             Get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Library preparation protocol tab")
-            library_protocol_dict,attribute_lists = get_library_protocol_tab_xls(srp_metadata_update,workbook,tab_name="Library preparation protocol")
+            library_protocol_dict,attribute_lists = get_tab.get_library_protocol_tab_xls(srp_metadata_update,workbook,tab_name="Library preparation protocol")
 
             """
             Get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Sequencing protocol tab")
-            sequencing_protocol_dict = get_sequencing_protocol_tab_xls(srp_metadata_update,workbook,attribute_lists,tab_name="Sequencing protocol")
+            sequencing_protocol_dict = get_tab.get_sequencing_protocol_tab_xls(workbook,attribute_lists,tab_name="Sequencing protocol")
 
             """
             Update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids.
             """
             print(f"Updating Sequencing file tab with protocol ids")
-            update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,workbook,tab_name="Sequence file")
+            get_tab.update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,workbook,tab_name="Sequence file")
 
             """
             Get Project metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting project metadata")
-            project_name, project_title, project_description, project_pubmed_id = get_project_main_tab_xls(srp_metadata_update,workbook,accession,tab_name="Project")
+            project_name,project_title,project_description,project_pubmed_id = get_tab.get_project_main_tab_xls(srp_metadata_update,workbook,accession,tab_name="Project")
 
             try:
                 """
                 Get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions.
                 """
-                get_project_publication_tab_xls(workbook,tab_name="Project - Publications",project_pubmed_id=project_pubmed_id)
+                get_tab.get_project_publication_tab_xls(workbook,tab_name="Project - Publications",project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Publication attribute error with GEO project {accession}')
 
@@ -276,7 +276,7 @@ def main():
                 """
                 Get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions.
                 """
-                get_project_contributors_tab_xls(workbook,tab_name="Project - Contributors",project_pubmed_id=project_pubmed_id)
+                get_tab.get_project_contributors_tab_xls(workbook,tab_name="Project - Contributors",project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Contributors attribute error with GEO project {accession}')
 
@@ -284,7 +284,7 @@ def main():
                 """
                 Get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions.
                 """
-                get_project_funders_tab_xls(workbook,tab_name="Project - Funders",project_pubmed_id=project_pubmed_id)
+                get_tab.get_project_funders_tab_xls(workbook,tab_name="Project - Funders",project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Funders attribute error with GEO project {accession}')
 
