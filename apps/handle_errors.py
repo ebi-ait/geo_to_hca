@@ -1,5 +1,11 @@
+"""
+Import required modules.
+"""
 import xml.etree.ElementTree as xm
 
+"""
+Define functions.
+"""
 class NotFoundSRA(Exception):
     """
     Sub-class for Exception to handle 400 error status codes.
