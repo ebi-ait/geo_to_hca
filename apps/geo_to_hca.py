@@ -302,7 +302,10 @@ def fetch_bioproject(bioproject_accession: str):
     project_publication = bioproject_metadata.find("Project").find('ProjectDescr').find('Publication')
     try:
         if project_publication.find('DbType').text == 'Pubmed' or project_publication.find('DbType').text == 'ePubmed':
-            project_pubmed_id = project_publication.find('Reference').text
+            try:
+                project_pubmed_id = project_publication.attrib['id']
+            except:
+                project_pubmed_id = project_publication.find('Reference').text
     except:
         print("No publication for project %s was found: searching project title in EuropePMC" % (bioproject_accession))
     if not project_publication or not project_pubmed_id:
@@ -535,7 +538,10 @@ def get_attributes_library_protocol(experiment_package):
         library_descriptors = experiment.find('LIBRARY_DESCRIPTOR')
         if library_descriptors:
             desc = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL')
-            library_construction_protocol = desc.text
+            if desc:
+                library_construction_protocol = desc.text
+            else:
+                library_construction_protocol = ''
         else:
             library_construction_protocol = ''
         illumina = experiment.find('ILLUMINA')
