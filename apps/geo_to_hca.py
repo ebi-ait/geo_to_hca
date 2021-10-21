@@ -174,7 +174,7 @@ def main():
             srp_accession = fetch_srp_accession(accession)
             print(f"Found SRA study ID: {srp_accession}")
 
-        elif 'SRP' in accession:
+        elif 'SRP' or 'ERP' in accession:
             srp_accession = accession
 
         if not srp_accession:
