@@ -1,16 +1,15 @@
-"""
-Import required modules.
-"""
+import logging
 import pandas as pd
+import re
 import requests as rq
 import xml.etree.ElementTree as xm
-import re
+import urllib.parse
 
 import utils.sra_utils as sra_utils
 
-"""
-Define functions.
-"""
+LOGGER = logging.getLogger(__name__)
+
+
 def request_fastq_from_ENA(srp_accession: str) -> {}:
     """
     Function to retrieve fastq file paths from ENA given an SRA study accession. The request returns a
@@ -19,15 +18,22 @@ def request_fastq_from_ENA(srp_accession: str) -> {}:
     run accessions as keys.
     """
     try:
-        request_url = f'http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession={srp_accession}&result=read_run&fields=run_accession,fastq_ftp'
-        fastq_results = pd.read_csv(request_url, delimiter='\t')
-        fastq_map = {
-            list(fastq_results['run_accession'])[i]: parse_reads.extract_reads_ENA(list(fastq_results['fastq_ftp'])[i])
-            for i
-            in range(0, len(list(fastq_results['run_accession'])))}
+        params = {
+            'accession': srp_accession,
+            'result': 'read_run',
+            'fields': 'run_accession,fastq_ftp'
+        }
+        request_params_str = urllib.parse.urlencode(params)
+        file_report_url = f'https://www.ebi.ac.uk/ena/portal/api/filereport?{request_params_str}'
+        fastq_results = pd.read_csv(file_report_url, delimiter='\t')
+        run_accessions = list(fastq_results['run_accession'])
+        ftps = list(fastq_results['fastq_ftp'])
+        fastq_map = {run_accessions[i]: extract_reads_ENA(ftps[i]) for i in range(0, len(run_accessions))}
         return fastq_map
-    except:
+    except Exception as e:
+        LOGGER.exception(e)
         return None
+
 
 def extract_reads_ENA(ftp_path: str) -> []:
     """
