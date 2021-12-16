@@ -22,10 +22,17 @@ Option (2): Get the HCA metadata for a comma-separated list of GEO accessions
 Example command:
 python apps/geo_to_hca.py --accession_list GSE97168,GSE124872,GSE126030
 
-Option (3): Get the HCA metadata for a tab-delimited file consisting of accessions N.B. should consist of an "accession"                   column name in the header. See example input file: docs/example_accessions.txt.
+Option (3): Get the HCA metadata given a file consisting of accessions N.B. should consist of an "accession" column name in the header. For example, an example input file named accessions.txt, should look like
+
+```
+accession
+GSE97168
+GSE124872
+GSE126030
+```
 
 Example command:
-python apps/geo_to_hca.py --input_file docs/example_accessions.txt
+python apps/geo_to_hca.py --input_file <path>/accessions.txt
 
 # Other optional arguments:
 
