@@ -9,7 +9,6 @@ import requests as rq
 
 # ---application imports
 from geo_to_hca.utils import handle_errors
-# # from .handle_errors import *
 
 
 """
