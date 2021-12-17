@@ -1,14 +1,16 @@
-"""
-Import required modules.
-"""
-from pysradb.sraweb import SRAweb
+# --- core imports
 from time import sleep
-import requests as rq
 import xml.etree.ElementTree as xm
-import pandas as pd
 
-import utils.handle_errors as handle_errors
-import utils.parse_reads as parse_reads
+# --- third-party imports
+import pandas as pd
+from pysradb.sraweb import SRAweb
+import requests as rq
+
+# ---application imports
+from geo_to_hca.utils import handle_errors
+# # from .handle_errors import *
+
 
 """
 Define constants.

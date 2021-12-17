@@ -1,17 +1,16 @@
-"""
-Import required modules.
-"""
+# --- core imports
 import argparse
 import multiprocessing
 from contextlib import contextmanager
+
+# --- third-party imports
 import pandas as pd
-import xml.etree.ElementTree as xm
 from openpyxl import Workbook
 from openpyxl.utils.cell import get_column_letter
-from openpyxl import load_workbook
 
-import utils.sra_utils as sra_utils
-import utils.get_attribs as get_attribs
+# ---application imports
+from geo_to_hca.utils import sra_utils
+from geo_to_hca.utils import get_attribs
 
 """
 Define functions.

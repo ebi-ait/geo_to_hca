@@ -1,11 +1,13 @@
+# --- core imports
 import logging
-import pandas as pd
 import re
-import requests as rq
-import xml.etree.ElementTree as xm
+
+# --- third-party imports
+import pandas as pd
 import urllib.parse
 
-import utils.sra_utils as sra_utils
+# ---application imports
+from geo_to_hca.utils import sra_utils
 
 LOGGER = logging.getLogger(__name__)
 

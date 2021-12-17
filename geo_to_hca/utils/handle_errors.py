@@ -1,6 +1,3 @@
-"""
-Import required modules.
-"""
 import xml.etree.ElementTree as xm
 
 """

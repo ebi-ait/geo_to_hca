@@ -1,13 +1,12 @@
-"""
-Import required modules.
-"""
-import pandas as pd
+# --- core imports
 from functools import partial
+
+# --- third-party imports
 import pandas as pd
 
-import utils.utils as utils
-import utils.sra_utils as sra_utils
-import utils.get_attribs as get_attribs
+# ---application imports
+from geo_to_hca.utils import utils
+
 
 """
 Define functions.

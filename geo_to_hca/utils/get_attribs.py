@@ -1,9 +1,11 @@
-"""
-Import required modules.
-"""
-import requests as rq
+# --- core imports
 import xml.etree.ElementTree as xm
-import pandas as pd
+
+# --- third-party imports
+import requests as rq
+
+# ---application imports
+from geo_to_hca.utils import handle_errors
 
 """
 Define constants.
@@ -30,7 +32,7 @@ def get_attributes_pubmed(xml_content: object,iteration: int) -> [str,[],[],str]
         try:
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
             if url.status_code == STATUS_ERROR_CODE:
-                raise NotFoundENA(url, title)
+                raise handle_errors.NotFoundENA(url, title)
             else:
                 xml_content_2 = xm.fromstring(url.content)
             try:
@@ -166,7 +168,7 @@ def get_attributes_bioproject(xml_content: object, bioproject_accession: str) ->
             print("project title is: %s" % (project_title))
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
             if url.status_code == STATUS_ERROR_CODE:
-                raise NotFoundENA(url, project_title)
+                raise handle_errors.NotFoundENA(url, project_title)
             else:
                 xml_content = xm.fromstring(url.content)
                 try:
@@ -211,7 +213,7 @@ def get_attributes_bioproject(xml_content: object, bioproject_accession: str) ->
                 print("project name is %s:" % (project_name))
                 url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
                 if url.status_code == STATUS_ERROR_CODE:
-                    raise NotFoundENA(url, project_name)
+                    raise handle_errors.NotFoundENA(url, project_name)
                 else:
                     xml_content = xm.fromstring(url.content)
                     try:

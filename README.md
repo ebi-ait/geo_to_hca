@@ -38,7 +38,7 @@ python apps/geo_to_hca.py --input_file <path>/accessions.txt
 
 (1)
 
---template,default="docs/hca_template.xlsx"
+--template,default="template/hca_template.xlsx"
 
 The default template is an empty HCA metadata spreadsheet in excel format, with the relevant HCA metdata headers in rows 1-5. The default header row with programmatic names is row 4; the default start input row is row 6.
 It is not necessary to specify this argument unless the HCA spreadsheet format changes.

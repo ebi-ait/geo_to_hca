@@ -1,18 +1,19 @@
-"""
-Import required modules.
-"""
-import pandas as pd
-from openpyxl import Workbook
-from openpyxl.utils.cell import get_column_letter
-from openpyxl import load_workbook
-import os,sys
+# --- core imports
 import argparse
+import os
+import sys
 
-import utils.sra_utils as sra_utils
-import utils.utils as utils
-import utils.parse_reads as parse_reads
-import utils.get_tab as get_tab
+# --- third-party imports
+import pandas as pd
+from openpyxl import load_workbook
 
+# --- application imports
+from .utils import get_tab
+from .utils import parse_reads
+from .utils import sra_utils
+from .utils import utils
+
+# from geo_to_hca.utils import get_tab --> remove
 """
 Define functions.
 """
@@ -100,7 +101,7 @@ def main():
     parser.add_argument('--input_file',type=utils.check_file,help='optional path to tab-delimited input .txt file')
     parser.add_argument('--nthreads',type=int,default=1,
                         help='number of multiprocessing processes to use')
-    parser.add_argument('--template',default="docs/hca_template.xlsx",
+    parser.add_argument('--template',default="template/hca_template.xlsx",
                         help='path to an HCA spreadsheet template (xlsx)')
     parser.add_argument('--header_row',type=int,default=4,
                         help='header row with HCA programmatic names')
@@ -127,14 +128,14 @@ def main():
         sys.exit()
 
     if not os.path.exists(args.template):
-        print("path to HCA template file not found; will revert to default: docs/hca_template.xlsx")
-        template = "docs/hca_template.xlsx"
+        print("path to HCA template file not found; will revert to default: template/hca_template.xlsx")
+        template = "template/hca_template.xlsx"
     try:
         workbook = load_workbook(filename=args.template)
         template = args.template
     except:
-        print("specified HCA template file is not valid xlsx; will revert to default: docs/hca_template.xlsx")
-        template = "docs/hca_template.xlsx"
+        print("specified HCA template file is not valid xlsx; will revert to default: template/hca_template.xlsx")
+        template = "template/hca_template.xlsx"
 
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
