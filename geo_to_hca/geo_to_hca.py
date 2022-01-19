@@ -127,13 +127,13 @@ def main():
         sys.exit()
 
     if not os.path.exists(args.template):
-        print("path to HCA template file not found; will revert to default: template/hca_template.xlsx")
+        print("path to HCA template file not found; will revert to default template file")
         template = "template/hca_template.xlsx"
     try:
         workbook = load_workbook(filename=args.template)
         template = args.template
     except:
-        print("specified HCA template file is not valid xlsx; will revert to default: template/hca_template.xlsx")
+        print("specified HCA template file is not valid xlsx; will revert to default template file")
         template = "template/hca_template.xlsx"
 
     if not os.path.exists(args.output_dir):
