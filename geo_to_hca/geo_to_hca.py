@@ -6,7 +6,7 @@ import sys
 
 # --- third-party imports
 import pandas as pd
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
 
 # --- application imports
 from geo_to_hca.utils import get_tab
@@ -14,6 +14,7 @@ from geo_to_hca.utils import parse_reads
 from geo_to_hca.utils import sra_utils
 from geo_to_hca.utils import utils
 
+DEFAULT_HCA_TEMPLATE = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
 """
 Define functions.
 """
@@ -91,182 +92,156 @@ def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.
     return srp_metadata_update
 
 
-def geo_to_hca(accession_list, hca_template, output_dir, nthreads):
+def save_spreadsheet_to_file(workbook: Workbook, accession:str, output_dir: str):
+    print(f"Done. Saving workbook to excel file")
+    out_file = f"{output_dir}/{accession}.xlsx"
+    workbook.save(out_file)
+
+
+def create_spreadsheet_using_geo_accession(accession, nthreads= 1):
+    workbook = load_workbook(filename=DEFAULT_HCA_TEMPLATE)
+
     """
-    Initialise dictionary to summarise query results for each given study accession (GEO or SRA study accession).
+    Initialise a study accession string.
     """
-    results = {}
+    srp_accession = None
+
+    """
+    Check the study accession type. Is it a GEO database study accession or SRA study accession? if GEO, fetch the
+    SRA study accession from the GEO accession.
+    """
+
+    if 'GSE' in accession:
+        print(f"Fetching SRA study ID for GEO dataset {accession}")
+        srp_accession = fetch_srp_accession(accession)
+        print(f"Found SRA study ID: {srp_accession}")
+
+    elif 'SRP' in accession or 'ERP' in accession:
+        srp_accession = accession
+        print(srp_accession)
+
+    if not srp_accession:
+        print(f"No SRA study accession is available for accession {accession}")
+        return
+
+    else:
+        """
+        Fetch the SRA study metadata for the srp accession.
+        """
+        print(f"Fetching study metadata for SRA study ID: {srp_accession}")
+        srp_metadata = fetch_srp_metadata(srp_accession)
+
+        """
+        Save the column names for later.
+        """
+        cols = srp_metadata.columns.tolist()
+
+        """
+        Fetch the fastq file names associated with the list of SRA study run accessions.
+        """
+        print(f"Fetching fastq file names for SRA study ID: {srp_accession}")
+        fastq_map = fetch_fastq_names(srp_accession, list(srp_metadata['Run']))
+
+        """
+        Record whether both read1 and read2 fastq files are available for the run accessions in the study.
+        """
+        if not fastq_map:
+            print(f"Both Read1 and Read2 fastq files are not available for SRA study ID: {srp_accession}")
+
+        else:
+            print(f"Found fastq files for SRA study ID: {srp_accession}")
+
+        """
+        Integrate metadata and fastq file names into a single dataframe.
+        """
+        print(f"Integrating study metadata and fastq file names")
+        srp_metadata_update = integrate_metadata(srp_metadata, fastq_map, cols)
+
+        """
+        Get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions.
+        """
+        print(f"Getting Sequence file tab")
+        sequence_file_tab = get_tab.get_sequence_file_tab_xls(srp_metadata_update, workbook,
+                                                              tab_name="Sequence file")
+
+        """
+        Get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions.
+        """
+        print(f"Getting Cell suspension tab")
+        get_tab.get_cell_suspension_tab_xls(srp_metadata_update, workbook, tab_name="Cell suspension")
+
+        """
+        Get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions.
+        """
+        print(f"Getting Specimen from Organism tab")
+        get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update, workbook, nthreads,
+                                                   tab_name="Specimen from organism")
+
+        """
+        Get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions.
+        """
+        print(f"Getting Library preparation protocol tab")
+        library_protocol_dict, attribute_lists = get_tab.get_library_protocol_tab_xls(srp_metadata_update, workbook,
+                                                                                      tab_name="Library preparation protocol")
+
+        """
+        Get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions.
+        """
+        print(f"Getting Sequencing protocol tab")
+        sequencing_protocol_dict = get_tab.get_sequencing_protocol_tab_xls(workbook, attribute_lists,
+                                                                           tab_name="Sequencing protocol")
+
+        """
+        Update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids.
+        """
+        print(f"Updating Sequencing file tab with protocol ids")
+        get_tab.update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
+                                             workbook, tab_name="Sequence file")
+
+        """
+        Get Project metadata: fetch as many fields as is possible using the above metadata accessions.
+        """
+        print(f"Getting project metadata")
+        project_name, project_title, project_description, project_pubmed_id = get_tab.get_project_main_tab_xls(
+            srp_metadata_update, workbook, accession, tab_name="Project")
+
+        try:
+            """
+            Get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions.
+            """
+            get_tab.get_project_publication_tab_xls(workbook, tab_name="Project - Publications",
+                                                    project_pubmed_id=project_pubmed_id)
+        except AttributeError:
+            print(f'Publication attribute error with GEO project {accession}')
+
+        try:
+            """
+            Get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions.
+            """
+            get_tab.get_project_contributors_tab_xls(workbook, tab_name="Project - Contributors",
+                                                     project_pubmed_id=project_pubmed_id)
+        except AttributeError:
+            print(f'Contributors attribute error with GEO project {accession}')
+
+        try:
+            """
+            Get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions.
+            """
+            get_tab.get_project_funders_tab_xls(workbook, tab_name="Project - Funders",
+                                                project_pubmed_id=project_pubmed_id)
+        except AttributeError:
+            print(f'Funders attribute error with GEO project {accession}')
+    return workbook
+
+
+def create_spreadsheet_using_geo_accessions(accession_list, output_dir: str, nthreads):
     """
     For each study accession provided, retrieve the relevant metadata from the SRA, ENA and EuropePMC databases and write to an
     HCA metadata spreadsheet.
     """
     for accession in accession_list:
-
-        """
-        Create an output empty spreadsheet file in which to store retrieved and parsed metadata.
-        """
-        out_file = f"{output_dir}/{accession}.xlsx"
-
-        """
-        Load an empty template HCA metadata excel spreadsheet. All tabs and fields should be in this template.
-        """
-        workbook = load_workbook(filename=hca_template)
-
-        """
-        Initialise a study accession string.
-        """
-        srp_accession = None
-
-        """
-        Check the study accession type. Is it a GEO database study accession or SRA study accession? if GEO, fetch the
-        SRA study accession from the GEO accession.
-        """
-        if 'GSE' in accession:
-            print(f"Fetching SRA study ID for GEO dataset {accession}")
-            srp_accession = fetch_srp_accession(accession)
-            print(f"Found SRA study ID: {srp_accession}")
-
-        elif 'SRP' or 'ERP' in accession:
-            srp_accession = accession
-
-        if not srp_accession:
-            results[accession] = {"SRA Study available": "no"}
-            results[accession].update({"fastq files available": "na"})
-            print(f"No SRA study accession is available for accession {accession}")
-            continue
-
-        else:
-            """
-            Fetch the SRA study metadata for the srp accession.
-            """
-            print(f"Fetching study metadata for SRA study ID: {srp_accession}")
-            srp_metadata = fetch_srp_metadata(srp_accession)
-
-            """
-            Save the column names for later.
-            """
-            cols = srp_metadata.columns.tolist()
-
-            """
-            Fetch the fastq file names associated with the list of SRA study run accessions.
-            """
-            print(f"Fetching fastq file names for SRA study ID: {srp_accession}")
-            fastq_map = fetch_fastq_names(srp_accession, list(srp_metadata['Run']))
-
-            """
-            Record whether both read1 and read2 fastq files are available for the run accessions in the study.
-            """
-            if not fastq_map:
-
-                print(f"Both Read1 and Read2 fastq files are not available for SRA study ID: {srp_accession}")
-                results[accession] = {"SRA Study available": "yes"}
-                results[accession].update({"fastq files available": "no"})
-
-            else:
-
-                print(f"Found fastq files for SRA study ID: {srp_accession}")
-                results[accession] = {"SRA Study available": "yes"}
-                results[accession].update({"fastq files available": "yes"})
-
-            """
-            Integrate metadata and fastq file names into a single dataframe.
-            """
-            print(f"Integrating study metadata and fastq file names")
-            srp_metadata_update = integrate_metadata(srp_metadata, fastq_map, cols)
-
-            """
-            Get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions.
-            """
-            print(f"Getting Sequence file tab")
-            sequence_file_tab = get_tab.get_sequence_file_tab_xls(srp_metadata_update, workbook,
-                                                                  tab_name="Sequence file")
-
-            """
-            Get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions.
-            """
-            print(f"Getting Cell suspension tab")
-            get_tab.get_cell_suspension_tab_xls(srp_metadata_update, workbook, tab_name="Cell suspension")
-
-            """
-            Get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions.
-            """
-            print(f"Getting Specimen from Organism tab")
-            get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update, workbook, nthreads,
-                                                       tab_name="Specimen from organism")
-
-            """
-            Get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions.
-            """
-            print(f"Getting Library preparation protocol tab")
-            library_protocol_dict, attribute_lists = get_tab.get_library_protocol_tab_xls(srp_metadata_update, workbook,
-                                                                                          tab_name="Library preparation protocol")
-
-            """
-            Get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions.
-            """
-            print(f"Getting Sequencing protocol tab")
-            sequencing_protocol_dict = get_tab.get_sequencing_protocol_tab_xls(workbook, attribute_lists,
-                                                                               tab_name="Sequencing protocol")
-
-            """
-            Update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids.
-            """
-            print(f"Updating Sequencing file tab with protocol ids")
-            get_tab.update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
-                                                 workbook, tab_name="Sequence file")
-
-            """
-            Get Project metadata: fetch as many fields as is possible using the above metadata accessions.
-            """
-            print(f"Getting project metadata")
-            project_name, project_title, project_description, project_pubmed_id = get_tab.get_project_main_tab_xls(
-                srp_metadata_update, workbook, accession, tab_name="Project")
-
-            try:
-                """
-                Get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions.
-                """
-                get_tab.get_project_publication_tab_xls(workbook, tab_name="Project - Publications",
-                                                        project_pubmed_id=project_pubmed_id)
-            except AttributeError:
-                print(f'Publication attribute error with GEO project {accession}')
-
-            try:
-                """
-                Get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions.
-                """
-                get_tab.get_project_contributors_tab_xls(workbook, tab_name="Project - Contributors",
-                                                         project_pubmed_id=project_pubmed_id)
-            except AttributeError:
-                print(f'Contributors attribute error with GEO project {accession}')
-
-            try:
-                """
-                Get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions.
-                """
-                get_tab.get_project_funders_tab_xls(workbook, tab_name="Project - Funders",
-                                                    project_pubmed_id=project_pubmed_id)
-            except AttributeError:
-                print(f'Funders attribute error with GEO project {accession}')
-
-        """
-        Done.
-        """
-        print(f"Done. Saving workbook to excel file")
-        workbook.save(out_file)
-    return results
-
-
-def create_log_file(results: dict, accessions: str, output_log: bool, output_dir):
-    """
-    Write results to previously created output file.
-    """
-    results = pd.DataFrame.from_dict(results).transpose()
-    print("showing result")
-    print(results)
-    if output_log:
-        results.to_csv(f"{output_dir}/results_{accessions}.log", sep="\t")
-    print("Done.")
+        workbook = create_spreadsheet_using_geo_accession(accession, nthreads)
+        save_spreadsheet_to_file(workbook, accession, output_dir)
 
 
 def main():
@@ -274,14 +249,13 @@ def main():
     """
     Parse user-provided command-line arguments.
     """
-    default_hca_template = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
     parser = argparse.ArgumentParser()
     parser.add_argument('--accession',type=str,help='accession (str): either GEO or SRA accession')
     parser.add_argument('--accession_list',type=utils.check_list_str,help='accession list (comma separated)')
     parser.add_argument('--input_file',type=utils.check_file,help='optional path to tab-delimited input .txt file')
     parser.add_argument('--nthreads',type=int,default=1,
                         help='number of multiprocessing processes to use')
-    parser.add_argument('--template',default=default_hca_template,
+    parser.add_argument('--template',default=DEFAULT_HCA_TEMPLATE,
                         help='path to an HCA spreadsheet template (xlsx)')
     parser.add_argument('--header_row',type=int,default=4,
                         help='header row with HCA programmatic names')
@@ -309,19 +283,19 @@ def main():
 
     if not os.path.exists(args.template):
         print("path to HCA template file not found; will revert to default template file")
-        template = default_hca_template
+        template = DEFAULT_HCA_TEMPLATE
     try:
         workbook = load_workbook(filename=args.template)
         template = args.template
     except:
         print("specified HCA template file is not valid xlsx; will revert to default template file")
-        template = default_hca_template
+        template = DEFAULT_HCA_TEMPLATE
 
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
 
-    results = geo_to_hca(accession_list, template, args.output_dir, args.nthreads)
-    create_log_file(results, ",".join(accession_list), args.output_log, args.output_dir)
+    create_spreadsheet_using_geo_accessions(accession_list, args.output_dir, args.nthreads)
+
 
 
 if __name__ == "__main__":
