@@ -8,12 +8,11 @@ import pandas as pd
 from openpyxl import load_workbook
 
 # --- application imports
-from .utils import get_tab
-from .utils import parse_reads
-from .utils import sra_utils
-from .utils import utils
+from geo_to_hca.utils import get_tab
+from geo_to_hca.utils import parse_reads
+from geo_to_hca.utils import sra_utils
+from geo_to_hca.utils import utils
 
-# from geo_to_hca.utils import get_tab --> remove
 """
 Define functions.
 """

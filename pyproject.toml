@@ -1,15 +1,21 @@
 [tool.poetry]
 name = "geo-to-hca"
-version = "1.0.0"
+version = "1.0.1"
 description = "Python library to convert GEO metadata to HCA metadata"
 authors = ["Ami Day <ami@ebi.ac.uk>",
     "Alegria Aclan <aaclan@ebi.ac.uk>",
-    "Enrique Sapien Venture <enrique@ebi.ac.uk>",
+    "Enrique Sapena Ventura <enrique@ebi.ac.uk>",
     "Wei Kheng Teh <wteh@ebi.ac.uk>"
 ]
 readme = "README.md"
 repository = "https://github.com/ebi-ait/geo_to_hca"
+packages = [
+    {include = "template"}
+]
 include = ["template/hca_template.xlsx"]
+
+[tool.poetry.scripts]
+geo-to-hca = "geo_to_hca.geo_to_hca:main"
 
 [tool.poetry.dependencies]
 python = "^3.7.1"
@@ -23,5 +29,5 @@ contextlib2 = "^21.6.0"
 [tool.poetry.dev-dependencies]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["setuptools", "poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
