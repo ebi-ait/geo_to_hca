@@ -1,6 +1,7 @@
 # --- core imports
 import argparse
 import os
+from pathlib import Path
 import sys
 
 # --- third-party imports
@@ -94,13 +95,14 @@ def main():
     """
     Parse user-provided command-line arguments.
     """
+    default_hca_template = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
     parser = argparse.ArgumentParser()
     parser.add_argument('--accession',type=str,help='accession (str): either GEO or SRA accession')
     parser.add_argument('--accession_list',type=utils.check_list_str,help='accession list (comma separated)')
     parser.add_argument('--input_file',type=utils.check_file,help='optional path to tab-delimited input .txt file')
     parser.add_argument('--nthreads',type=int,default=1,
                         help='number of multiprocessing processes to use')
-    parser.add_argument('--template',default="template/hca_template.xlsx",
+    parser.add_argument('--template',default=default_hca_template,
                         help='path to an HCA spreadsheet template (xlsx)')
     parser.add_argument('--header_row',type=int,default=4,
                         help='header row with HCA programmatic names')
@@ -128,13 +130,13 @@ def main():
 
     if not os.path.exists(args.template):
         print("path to HCA template file not found; will revert to default template file")
-        template = "template/hca_template.xlsx"
+        template = default_hca_template
     try:
         workbook = load_workbook(filename=args.template)
         template = args.template
     except:
         print("specified HCA template file is not valid xlsx; will revert to default template file")
-        template = "template/hca_template.xlsx"
+        template = default_hca_template
 
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
