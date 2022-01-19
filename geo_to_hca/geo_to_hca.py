@@ -90,62 +90,12 @@ def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.
     srp_metadata_update.columns = cols
     return srp_metadata_update
 
-def main():
 
-    """
-    Parse user-provided command-line arguments.
-    """
-    default_hca_template = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--accession',type=str,help='accession (str): either GEO or SRA accession')
-    parser.add_argument('--accession_list',type=utils.check_list_str,help='accession list (comma separated)')
-    parser.add_argument('--input_file',type=utils.check_file,help='optional path to tab-delimited input .txt file')
-    parser.add_argument('--nthreads',type=int,default=1,
-                        help='number of multiprocessing processes to use')
-    parser.add_argument('--template',default=default_hca_template,
-                        help='path to an HCA spreadsheet template (xlsx)')
-    parser.add_argument('--header_row',type=int,default=4,
-                        help='header row with HCA programmatic names')
-    parser.add_argument('--input_row1',type=int,default=6,
-                        help='HCA metadata input start row')
-    parser.add_argument('--output_dir',default='spreadsheets/',
-                        help='path to output directory; if it does not exist, the directory will be created')
-    parser.add_argument('--output_log',type=bool,default=True,
-                        help='True/False: should the output result log be created')
-
-    args = parser.parse_args()
-
-    """
-    Check user-provided command-line arguments are valid.
-    """
-    if args.input_file:
-        accession_list = args.input_file
-    elif args.accession_list:
-        accession_list = args.accession_list
-    elif args.accession:
-        accession_list = [args.accession]
-    else:
-        print("GEO or SRA accession input is not specified")
-        sys.exit()
-
-    if not os.path.exists(args.template):
-        print("path to HCA template file not found; will revert to default template file")
-        template = default_hca_template
-    try:
-        workbook = load_workbook(filename=args.template)
-        template = args.template
-    except:
-        print("specified HCA template file is not valid xlsx; will revert to default template file")
-        template = default_hca_template
-
-    if not os.path.exists(args.output_dir):
-        os.mkdir(args.output_dir)
-
+def geo_to_hca(accession_list, hca_template, output_dir, nthreads):
     """
     Initialise dictionary to summarise query results for each given study accession (GEO or SRA study accession).
     """
     results = {}
-
     """
     For each study accession provided, retrieve the relevant metadata from the SRA, ENA and EuropePMC databases and write to an
     HCA metadata spreadsheet.
@@ -155,12 +105,12 @@ def main():
         """
         Create an output empty spreadsheet file in which to store retrieved and parsed metadata.
         """
-        out_file = f"{args.output_dir}/{accession}.xlsx"
+        out_file = f"{output_dir}/{accession}.xlsx"
 
         """
         Load an empty template HCA metadata excel spreadsheet. All tabs and fields should be in this template.
         """
-        workbook = load_workbook(filename=template)
+        workbook = load_workbook(filename=hca_template)
 
         """
         Initialise a study accession string.
@@ -228,49 +178,56 @@ def main():
             Get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Sequence file tab")
-            sequence_file_tab = get_tab.get_sequence_file_tab_xls(srp_metadata_update,workbook,tab_name="Sequence file")
+            sequence_file_tab = get_tab.get_sequence_file_tab_xls(srp_metadata_update, workbook,
+                                                                  tab_name="Sequence file")
 
             """
             Get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Cell suspension tab")
-            get_tab.get_cell_suspension_tab_xls(srp_metadata_update,workbook,tab_name="Cell suspension")
+            get_tab.get_cell_suspension_tab_xls(srp_metadata_update, workbook, tab_name="Cell suspension")
 
             """
             Get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Specimen from Organism tab")
-            get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update,workbook,args.nthreads,tab_name="Specimen from organism")
+            get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update, workbook, nthreads,
+                                                       tab_name="Specimen from organism")
 
             """
             Get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Library preparation protocol tab")
-            library_protocol_dict,attribute_lists = get_tab.get_library_protocol_tab_xls(srp_metadata_update,workbook,tab_name="Library preparation protocol")
+            library_protocol_dict, attribute_lists = get_tab.get_library_protocol_tab_xls(srp_metadata_update, workbook,
+                                                                                          tab_name="Library preparation protocol")
 
             """
             Get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting Sequencing protocol tab")
-            sequencing_protocol_dict = get_tab.get_sequencing_protocol_tab_xls(workbook,attribute_lists,tab_name="Sequencing protocol")
+            sequencing_protocol_dict = get_tab.get_sequencing_protocol_tab_xls(workbook, attribute_lists,
+                                                                               tab_name="Sequencing protocol")
 
             """
             Update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids.
             """
             print(f"Updating Sequencing file tab with protocol ids")
-            get_tab.update_sequence_file_tab_xls(sequence_file_tab,library_protocol_dict,sequencing_protocol_dict,workbook,tab_name="Sequence file")
+            get_tab.update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
+                                                 workbook, tab_name="Sequence file")
 
             """
             Get Project metadata: fetch as many fields as is possible using the above metadata accessions.
             """
             print(f"Getting project metadata")
-            project_name,project_title,project_description,project_pubmed_id = get_tab.get_project_main_tab_xls(srp_metadata_update,workbook,accession,tab_name="Project")
+            project_name, project_title, project_description, project_pubmed_id = get_tab.get_project_main_tab_xls(
+                srp_metadata_update, workbook, accession, tab_name="Project")
 
             try:
                 """
                 Get Project - Publications metadata: fetch as many fields as is possible using the above metadata accessions.
                 """
-                get_tab.get_project_publication_tab_xls(workbook,tab_name="Project - Publications",project_pubmed_id=project_pubmed_id)
+                get_tab.get_project_publication_tab_xls(workbook, tab_name="Project - Publications",
+                                                        project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Publication attribute error with GEO project {accession}')
 
@@ -278,7 +235,8 @@ def main():
                 """
                 Get Project - Contributors metadata: fetch as many fields as is possible using the above metadata accessions.
                 """
-                get_tab.get_project_contributors_tab_xls(workbook,tab_name="Project - Contributors",project_pubmed_id=project_pubmed_id)
+                get_tab.get_project_contributors_tab_xls(workbook, tab_name="Project - Contributors",
+                                                         project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Contributors attribute error with GEO project {accession}')
 
@@ -286,7 +244,8 @@ def main():
                 """
                 Get Project - Funders metadata: fetch as many fields as is possible using the above metadata accessions.
                 """
-                get_tab.get_project_funders_tab_xls(workbook,tab_name="Project - Funders",project_pubmed_id=project_pubmed_id)
+                get_tab.get_project_funders_tab_xls(workbook, tab_name="Project - Funders",
+                                                    project_pubmed_id=project_pubmed_id)
             except AttributeError:
                 print(f'Funders attribute error with GEO project {accession}')
 
@@ -295,16 +254,75 @@ def main():
         """
         print(f"Done. Saving workbook to excel file")
         workbook.save(out_file)
+    return results
 
+
+def create_log_file(results: dict, accessions: str, output_log: bool, output_dir):
     """
     Write results to previously created output file.
     """
     results = pd.DataFrame.from_dict(results).transpose()
     print("showing result")
     print(results)
-    if args.output_log:
-        results.to_csv(f"{args.output_dir}/results_{accession}.log",sep="\t")
+    if output_log:
+        results.to_csv(f"{output_dir}/results_{accessions}.log", sep="\t")
     print("Done.")
+
+
+def main():
+
+    """
+    Parse user-provided command-line arguments.
+    """
+    default_hca_template = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--accession',type=str,help='accession (str): either GEO or SRA accession')
+    parser.add_argument('--accession_list',type=utils.check_list_str,help='accession list (comma separated)')
+    parser.add_argument('--input_file',type=utils.check_file,help='optional path to tab-delimited input .txt file')
+    parser.add_argument('--nthreads',type=int,default=1,
+                        help='number of multiprocessing processes to use')
+    parser.add_argument('--template',default=default_hca_template,
+                        help='path to an HCA spreadsheet template (xlsx)')
+    parser.add_argument('--header_row',type=int,default=4,
+                        help='header row with HCA programmatic names')
+    parser.add_argument('--input_row1',type=int,default=6,
+                        help='HCA metadata input start row')
+    parser.add_argument('--output_dir',default='spreadsheets/',
+                        help='path to output directory; if it does not exist, the directory will be created')
+    parser.add_argument('--output_log',type=bool,default=True,
+                        help='True/False: should the output result log be created')
+
+    args = parser.parse_args()
+
+    """
+    Check user-provided command-line arguments are valid.
+    """
+    if args.input_file:
+        accession_list = args.input_file
+    elif args.accession_list:
+        accession_list = args.accession_list
+    elif args.accession:
+        accession_list = [args.accession]
+    else:
+        print("GEO or SRA accession input is not specified")
+        sys.exit()
+
+    if not os.path.exists(args.template):
+        print("path to HCA template file not found; will revert to default template file")
+        template = default_hca_template
+    try:
+        workbook = load_workbook(filename=args.template)
+        template = args.template
+    except:
+        print("specified HCA template file is not valid xlsx; will revert to default template file")
+        template = default_hca_template
+
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
+
+    results = geo_to_hca(accession_list, template, args.output_dir, args.nthreads)
+    create_log_file(results, ",".join(accession_list), args.output_log, args.output_dir)
+
 
 if __name__ == "__main__":
     main()
