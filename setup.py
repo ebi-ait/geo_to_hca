@@ -1,11 +1,10 @@
 import pathlib
 from setuptools import setup, find_packages
 
-# The directory containing this file
 HERE = pathlib.Path(__file__).parent
 
-# The text of the README file
 README = (HERE / "README.md").read_text()
+install_requires = [line.rstrip() for line in (HERE / "requirements.txt").read_text().splitlines()]
 
 setup(
     name="geo-to-hca",
@@ -21,7 +20,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
     ],
     packages=find_packages(exclude=["tests", "tests.*"]),
-    install_requires=[line.rstrip() for line in (HERE / "requirements.txt").read_text().splitlines()],
+    install_requires=install_requires,
     include_package_data=True,
     entry_points={
         "console_scripts": [

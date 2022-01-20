@@ -121,8 +121,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1):
         print(srp_accession)
 
     if not srp_accession:
-        print(f"No SRA study accession is available for accession {accession}")
-        return
+        raise Exception(f"No SRA study accession is available for accession {accession}")
 
     else:
         """
