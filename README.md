@@ -55,13 +55,13 @@ Option (1): Get the HCA metadata for 1 GEO accession
 
 Example command:
 
-`python geo-to-hca --accession GSE97168`
+`geo-to-hca --accession GSE97168`
 
 Option (2): Get the HCA metadata for a comma-separated list of GEO accessions
 
 Example command:
 
-`python geo-to-hca --accession_list GSE97168,GSE124872,GSE126030`
+`geo-to-hca --accession_list GSE97168,GSE124872,GSE126030`
 
 Option (3): Get the HCA metadata given a file consisting of accessions N.B. should consist of an "accession" column name in the header. For example, an example input file named accessions.txt, should look like
 
@@ -74,7 +74,7 @@ GSE126030
 
 Example command:
 
-`python geo-to-hca --input_file <path>/accessions.txt`
+`geo-to-hca --input_file <path>/accessions.txt`
 
 ### Other optional arguments:
 
