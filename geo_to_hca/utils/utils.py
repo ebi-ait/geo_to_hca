@@ -1,5 +1,6 @@
 # --- core imports
 import argparse
+import logging
 import multiprocessing
 from contextlib import contextmanager
 
@@ -40,7 +41,7 @@ def test_number_fastq_files(fastq_map: {}) -> {}:
         if all(test_number_files) is True:
             fastq_map = None
         elif any(test_number_files) is True:
-            print("Fastq file names for only some of the SRA run accessions are not available.")
+            logging.info("Fastq file names for only some of the SRA run accessions are not available.")
     return fastq_map
 
 def get_pubmed_metadata(project_pubmed_id: str,iteration: int) -> []:
