@@ -1,8 +1,8 @@
 # --- core imports
 import argparse
+import logging
 import os
 from pathlib import Path
-import sys
 
 # --- third-party imports
 import pandas as pd
@@ -15,9 +15,8 @@ from geo_to_hca.utils import sra_utils
 from geo_to_hca.utils import utils
 
 DEFAULT_HCA_TEMPLATE = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
-"""
-Define functions.
-"""
+
+
 def fetch_srp_accession(geo_accession: str) -> str:
     """
     Function to retrieve an SRA study accession given a GEO accession.
@@ -27,12 +26,14 @@ def fetch_srp_accession(geo_accession: str) -> str:
         if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
         elif srp.shape[0] > 1:
-            print("More than 1 accession has been found. Please enter re-try with a single SRA Study accession.")
-            sys.exit()
+            raise Exception("More than 1 accession has been found. Please enter re-try with a single SRA Study "
+                            "accession.")
     else:
-        print("Could not recognise GEO accession %s; is it a GEO Superseries? If yes, please re-try with a subseries accession: " % (geo_accession))
-        sys.exit()
+        raise Exception(f"Could not recognise GEO accession {geo_accession}; is it a GEO Superseries? If yes, please "
+                        f"re-try with a "
+                        "subseries accession")
     return srp
+
 
 def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     """
@@ -40,6 +41,7 @@ def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     """
     srp_metadata_df = sra_utils.SraUtils.get_srp_metadata(srp_accession)
     return srp_metadata_df
+
 
 def fetch_fastq_names(srp_accession: str, srr_accessions: []) -> {}:
     """
@@ -59,6 +61,7 @@ def fetch_fastq_names(srp_accession: str, srr_accessions: []) -> {}:
         fastq_map = parse_reads.get_fastq_from_SRA(srr_accessions)
         fastq_map = utils.test_number_fastq_files(fastq_map)
     return fastq_map
+
 
 def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.DataFrame:
     """
@@ -112,13 +115,14 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1):
     """
 
     if 'GSE' in accession:
-        print(f"Fetching SRA study ID for GEO dataset {accession}")
-        srp_accession = fetch_srp_accession(accession)
-        print(f"Found SRA study ID: {srp_accession}")
-
+        try:
+            logging.info(f"Fetching SRA study ID for GEO dataset {accession}")
+            srp_accession = fetch_srp_accession(accession)
+            logging.info(f"Found SRA study ID: {srp_accession}")
+        except Exception:
+            raise
     elif 'SRP' in accession or 'ERP' in accession:
         srp_accession = accession
-        print(srp_accession)
 
     if not srp_accession:
         raise Exception(f"No SRA study accession is available for accession {accession}")
@@ -277,8 +281,7 @@ def main():
     elif args.accession:
         accession_list = [args.accession]
     else:
-        print("GEO or SRA accession input is not specified")
-        sys.exit()
+        raise ValueError("GEO or SRA accession input must be specified")
 
     if not os.path.exists(args.template):
         print("path to HCA template file not found; will revert to default template file")
@@ -294,7 +297,6 @@ def main():
         os.mkdir(args.output_dir)
 
     create_spreadsheet_using_geo_accessions(accession_list, args.output_dir, args.nthreads)
-
 
 
 if __name__ == "__main__":
