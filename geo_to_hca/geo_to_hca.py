@@ -16,6 +16,7 @@ from geo_to_hca.utils import sra_utils
 from geo_to_hca.utils import utils
 
 DEFAULT_HCA_TEMPLATE = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
+log = logging.getLogger(__name__)
 
 
 def fetch_srp_accession(geo_accession: str) -> str:
@@ -116,9 +117,9 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
     """
 
     if 'GSE' in accession:
-        logging.info(f"Fetching SRA study ID for GEO dataset {accession}")
+        log.info(f"Fetching SRA study ID for GEO dataset {accession}")
         srp_accession = fetch_srp_accession(accession)
-        logging.info(f"Found SRA study ID: {srp_accession}")
+        log.info(f"Found SRA study ID: {srp_accession}")
 
     elif 'SRP' in accession or 'ERP' in accession:
         srp_accession = accession
@@ -130,7 +131,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
         """
         Fetch the SRA study metadata for the srp accession.
         """
-        logging.info(f"Fetching study metadata for SRA study ID: {srp_accession}")
+        log.info(f"Fetching study metadata for SRA study ID: {srp_accession}")
         srp_metadata = fetch_srp_metadata(srp_accession)
 
         """
@@ -141,69 +142,69 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
         """
         Fetch the fastq file names associated with the list of SRA study run accessions.
         """
-        logging.info(f"Fetching fastq file names for SRA study ID: {srp_accession}")
+        log.info(f"Fetching fastq file names for SRA study ID: {srp_accession}")
         fastq_map = fetch_fastq_names(srp_accession, list(srp_metadata['Run']))
 
         """
         Record whether both read1 and read2 fastq files are available for the run accessions in the study.
         """
         if not fastq_map:
-            logging.info(f"Both Read1 and Read2 fastq files are not available for SRA study ID: {srp_accession}")
+            log.info(f"Both Read1 and Read2 fastq files are not available for SRA study ID: {srp_accession}")
 
         else:
-            logging.info(f"Found fastq files for SRA study ID: {srp_accession}")
+            log.info(f"Found fastq files for SRA study ID: {srp_accession}")
 
         """
         Integrate metadata and fastq file names into a single dataframe.
         """
-        logging.info(f"Integrating study metadata and fastq file names")
+        log.info(f"Integrating study metadata and fastq file names")
         srp_metadata_update = integrate_metadata(srp_metadata, fastq_map, cols)
 
         """
         Get HCA Sequence file metadata: fetch as many fields as is possible using the above metadata accessions.
         """
-        logging.info(f"Getting Sequence file tab")
+        log.info(f"Getting Sequence file tab")
         sequence_file_tab = get_tab.get_sequence_file_tab_xls(srp_metadata_update, workbook,
                                                               tab_name="Sequence file")
 
         """
         Get HCA Cell suspension metadata: fetch as many fields as is possible using the above metadata accessions.
         """
-        logging.info(f"Getting Cell suspension tab")
+        log.info(f"Getting Cell suspension tab")
         get_tab.get_cell_suspension_tab_xls(srp_metadata_update, workbook, tab_name="Cell suspension")
 
         """
         Get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions.
         """
-        logging.info(f"Getting Specimen from Organism tab")
+        log.info(f"Getting Specimen from Organism tab")
         get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update, workbook, nthreads,
                                                    tab_name="Specimen from organism")
 
         """
         Get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions.
         """
-        logging.info(f"Getting Library preparation protocol tab")
+        log.info(f"Getting Library preparation protocol tab")
         library_protocol_dict, attribute_lists = get_tab.get_library_protocol_tab_xls(srp_metadata_update, workbook,
                                                                                       tab_name="Library preparation protocol")
 
         """
         Get HCA Sequencing protocol metadata: fetch as many fields as is possible using the above metadata accessions.
         """
-        logging.info(f"Getting Sequencing protocol tab")
+        log.info(f"Getting Sequencing protocol tab")
         sequencing_protocol_dict = get_tab.get_sequencing_protocol_tab_xls(workbook, attribute_lists,
                                                                            tab_name="Sequencing protocol")
 
         """
         Update HCA Sequence file metadata with the correct library preparation protocol ids and sequencing protocol ids.
         """
-        logging.info(f"Updating Sequencing file tab with protocol ids")
+        log.info(f"Updating Sequencing file tab with protocol ids")
         get_tab.update_sequence_file_tab_xls(sequence_file_tab, library_protocol_dict, sequencing_protocol_dict,
                                              workbook, tab_name="Sequence file")
 
         """
         Get Project metadata: fetch as many fields as is possible using the above metadata accessions.
         """
-        logging.info(f"Getting project metadata")
+        log.info(f"Getting project metadata")
         project_name, project_title, project_description, project_pubmed_id = get_tab.get_project_main_tab_xls(
             srp_metadata_update, workbook, accession, tab_name="Project")
 
@@ -214,7 +215,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
             get_tab.get_project_publication_tab_xls(workbook, tab_name="Project - Publications",
                                                     project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            logging.info(f'Publication attribute error with GEO project {accession}')
+            log.info(f'Publication attribute error with GEO project {accession}')
 
         try:
             """
@@ -223,7 +224,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
             get_tab.get_project_contributors_tab_xls(workbook, tab_name="Project - Contributors",
                                                      project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            logging.info(f'Contributors attribute error with GEO project {accession}')
+            log.info(f'Contributors attribute error with GEO project {accession}')
 
         try:
             """
@@ -232,7 +233,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
             get_tab.get_project_funders_tab_xls(workbook, tab_name="Project - Funders",
                                                 project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            logging.info(f'Funders attribute error with GEO project {accession}')
+            log.info(f'Funders attribute error with GEO project {accession}')
     return workbook
 
 
@@ -248,14 +249,14 @@ def create_spreadsheet_using_geo_accessions(accession_list, output_dir: str, nth
 
 
 def prepare_logging():
-    logging.basicConfig(stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+    log.basicConfig(stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
 
-        logging.error("Exception", exc_info=(exc_type, exc_value, exc_traceback))
+        log.error("Exception", exc_info=(exc_type, exc_value, exc_traceback))
 
     sys.excepthook = handle_exception
 
@@ -296,7 +297,7 @@ def main():
     else:
         raise ValueError("GEO or SRA accession input must be specified")
 
-    logging.info(f"Using the HCA template file specified at: {args.template}")
+    log.info(f"Using the HCA template file specified at: {args.template}")
 
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
@@ -304,7 +305,7 @@ def main():
     try:
         create_spreadsheet_using_geo_accessions(accession_list, args.output_dir, args.nthreads, args.template)
     except Exception:
-        logging.exception("")
+        log.exception("")
 
 if __name__ == "__main__":
     main()

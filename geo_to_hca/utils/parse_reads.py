@@ -9,7 +9,7 @@ import urllib.parse
 # ---application imports
 from geo_to_hca.utils import sra_utils
 
-LOGGER = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def request_fastq_from_ENA(srp_accession: str) -> {}:
@@ -33,7 +33,7 @@ def request_fastq_from_ENA(srp_accession: str) -> {}:
         fastq_map = {run_accessions[i]: extract_reads_ENA(ftps[i]) for i in range(0, len(run_accessions))}
         return fastq_map
     except Exception as e:
-        LOGGER.exception(e)
+        log.exception(e)
         return None
 
 

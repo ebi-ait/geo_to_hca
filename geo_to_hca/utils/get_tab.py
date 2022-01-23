@@ -8,6 +8,8 @@ import pandas as pd
 # ---application imports
 from geo_to_hca.utils import utils
 
+log = logging.getLogger(__name__)
+
 
 def get_sequence_file_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,tab_name: str) -> pd.DataFrame:
     """
@@ -80,7 +82,7 @@ def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workboo
             with utils.poolcontext(processes=nthreads) as pool:
                 results = pool.map(partial(process_specimen_from_organism, srp_metadata_update=srp_metadata_update), attribute_lists)
         except KeyboardInterrupt:
-            logging.info("Process has been interrupted.")
+            log.info("Process has been interrupted.")
             pool.terminate()
     if results:
         df = pd.DataFrame(results)
@@ -128,7 +130,7 @@ def get_library_protocol_tab_xls(srp_metadata_update: pd.DataFrame,workbook: obj
                                         'library_preparation_protocol.umi_barcode.barcode_offset':16,
                                         'library_preparation_protocol.umi_barcode.barcode_length':10})
                     elif "5'" in library_protocol:
-                        logging.info("Please let Ami know that you have come across a 10X v2 5' dataset")
+                        log.info("Please let Ami know that you have come across a 10X v2 5' dataset")
                         tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
                                         'library_preparation_protocol.cell_barcode.barcode_offset': 0,
                                         'library_preparation_protocol.cell_barcode.barcode_length': 16,
@@ -293,7 +295,7 @@ def get_project_main_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,
         tab = utils.get_empty_df(workbook,tab_name)
         bioproject = list(set(list(srp_metadata_update['BioProject'])))
         if len(bioproject) > 1:
-            logging.info("more than 1 bioproject, check this")
+            log.info("more than 1 bioproject, check this")
         else:
             bioproject = bioproject[0]
         project_name,project_title,project_description,project_pubmed_id = utils.get_bioproject_metadata(bioproject)

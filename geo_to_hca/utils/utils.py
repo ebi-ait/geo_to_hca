@@ -14,6 +14,9 @@ from openpyxl.utils.cell import get_column_letter
 from geo_to_hca.utils import sra_utils
 from geo_to_hca.utils import get_attribs
 
+log = logging.getLogger(__name__)
+
+
 """
 Define functions.
 """
@@ -42,7 +45,7 @@ def test_number_fastq_files(fastq_map: {}) -> {}:
         if all(test_number_files) is True:
             fastq_map = None
         elif any(test_number_files) is True:
-            logging.info("Fastq file names for only some of the SRA run accessions are not available.")
+            log.info("Fastq file names for only some of the SRA run accessions are not available.")
     return fastq_map
 
 def get_pubmed_metadata(project_pubmed_id: str,iteration: int) -> []:
