@@ -64,6 +64,7 @@ def process_specimen_from_organism(biosample_attribute_list: [],srp_metadata_upd
           'process.insdc_experiment.insdc_experiment_accession':srp_metadata_update[srp_metadata_update['BioSample'] == biosample_attribute_list[0]]['Experiment'].values.tolist()[0]}
     return df
 
+
 def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,nthreads: int,tab_name: str) -> None:
     """
     Fills Specimen from organism metadata fields based on sample metadata obtained via a request to NCBI SRA
@@ -86,6 +87,7 @@ def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workboo
         tab = tab.append(df,sort=True)
         tab = tab.sort_values(by='process.insdc_experiment.insdc_experiment_accession')
         utils.write_to_wb(workbook, tab_name, tab)
+
 
 def get_library_protocol_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,tab_name: str) -> [{},[]]:
     """
@@ -212,6 +214,7 @@ def get_library_protocol_tab_xls(srp_metadata_update: pd.DataFrame,workbook: obj
     utils.write_to_wb(workbook, tab_name, tab)
     return library_protocol_dict,attribute_lists
 
+
 def get_sequencing_protocol_tab_xls(workbook: object,attribute_lists: [],tab_name: str) -> {}:
     """
     Fills Sequencing protocol metadata fields based on experiment metadata obtained via a previous request to NCBI SRA
@@ -255,6 +258,7 @@ def get_sequencing_protocol_tab_xls(workbook: object,attribute_lists: [],tab_nam
                                                     "sequencing_protocol_description":sequencing_protocol_description}
     utils.write_to_wb(workbook, tab_name, tab)
     return sequencing_protocol_dict
+
 
 def update_sequence_file_tab_xls(sequence_file_tab: pd.DataFrame,library_protocol_dict: {},sequencing_protocol_dict: {},workbook: object,tab_name: str) -> None:
     """
@@ -324,6 +328,7 @@ def get_project_publication_tab_xls(workbook: object,tab_name: str,project_pubme
                       'project.publications.url':''}, ignore_index=True)
     utils.write_to_wb(workbook, tab_name, tab)
 
+
 def get_project_contributors_tab_xls(workbook: object,tab_name: str,project_pubmed_id: str) -> None:
     """
     Function to fetch publication metadata, specifically about the publication contributors from an xml following a request to NCBI.
@@ -335,6 +340,7 @@ def get_project_contributors_tab_xls(workbook: object,tab_name: str,project_pubm
         affiliation = author[3]
         tab = tab.append({'project.contributors.name':name,'project.contributors.institution':affiliation}, ignore_index=True)
     utils.write_to_wb(workbook, tab_name, tab)
+
 
 def get_project_funders_tab_xls(workbook: object,tab_name: str,project_pubmed_id: str) -> None:
     """
