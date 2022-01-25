@@ -1,17 +1,16 @@
-"""
-Import required modules.
-"""
-import pandas as pd
+# --- core imports
 from functools import partial
+import logging
+
+# --- third-party imports
 import pandas as pd
 
-import utils.utils as utils
-import utils.sra_utils as sra_utils
-import utils.get_attribs as get_attribs
+# ---application imports
+from geo_to_hca.utils import utils
 
-"""
-Define functions.
-"""
+log = logging.getLogger(__name__)
+
+
 def get_sequence_file_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,tab_name: str) -> pd.DataFrame:
     """
     Fills Sequence file metadata fields where the required fields are available in the input dataframe. Writes this tab.
@@ -31,6 +30,7 @@ def get_sequence_file_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object
                           'process.process_core.process_id':row['Run']}, ignore_index=True)
     tab = tab.sort_values(by='sequence_file.insdc_run_accessions')
     return tab
+
 
 def get_cell_suspension_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,tab_name: str) -> None:
     """
@@ -66,6 +66,7 @@ def process_specimen_from_organism(biosample_attribute_list: [],srp_metadata_upd
           'process.insdc_experiment.insdc_experiment_accession':srp_metadata_update[srp_metadata_update['BioSample'] == biosample_attribute_list[0]]['Experiment'].values.tolist()[0]}
     return df
 
+
 def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,nthreads: int,tab_name: str) -> None:
     """
     Fills Specimen from organism metadata fields based on sample metadata obtained via a request to NCBI SRA
@@ -81,13 +82,14 @@ def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workboo
             with utils.poolcontext(processes=nthreads) as pool:
                 results = pool.map(partial(process_specimen_from_organism, srp_metadata_update=srp_metadata_update), attribute_lists)
         except KeyboardInterrupt:
-            print("Process has been interrupted.")
+            log.info("Process has been interrupted.")
             pool.terminate()
     if results:
         df = pd.DataFrame(results)
         tab = tab.append(df,sort=True)
         tab = tab.sort_values(by='process.insdc_experiment.insdc_experiment_accession')
         utils.write_to_wb(workbook, tab_name, tab)
+
 
 def get_library_protocol_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,tab_name: str) -> [{},[]]:
     """
@@ -128,7 +130,7 @@ def get_library_protocol_tab_xls(srp_metadata_update: pd.DataFrame,workbook: obj
                                         'library_preparation_protocol.umi_barcode.barcode_offset':16,
                                         'library_preparation_protocol.umi_barcode.barcode_length':10})
                     elif "5'" in library_protocol:
-                        print("Please let Ami know that you have come across a 10X v2 5' dataset")
+                        log.info("Please let Ami know that you have come across a 10X v2 5' dataset")
                         tmp_dict.update({'library_preparation_protocol.cell_barcode.barcode_read': 'Read1',
                                         'library_preparation_protocol.cell_barcode.barcode_offset': 0,
                                         'library_preparation_protocol.cell_barcode.barcode_length': 16,
@@ -214,6 +216,7 @@ def get_library_protocol_tab_xls(srp_metadata_update: pd.DataFrame,workbook: obj
     utils.write_to_wb(workbook, tab_name, tab)
     return library_protocol_dict,attribute_lists
 
+
 def get_sequencing_protocol_tab_xls(workbook: object,attribute_lists: [],tab_name: str) -> {}:
     """
     Fills Sequencing protocol metadata fields based on experiment metadata obtained via a previous request to NCBI SRA
@@ -258,6 +261,7 @@ def get_sequencing_protocol_tab_xls(workbook: object,attribute_lists: [],tab_nam
     utils.write_to_wb(workbook, tab_name, tab)
     return sequencing_protocol_dict
 
+
 def update_sequence_file_tab_xls(sequence_file_tab: pd.DataFrame,library_protocol_dict: {},sequencing_protocol_dict: {},workbook: object,tab_name: str) -> None:
     """
     Updates and writes the Sequencing file tab based on the unique Library preparation protocols and Sequencing file protocols obtained previously
@@ -279,6 +283,7 @@ def update_sequence_file_tab_xls(sequence_file_tab: pd.DataFrame,library_protoco
     sequence_file_tab['sequencing_protocol.protocol_core.protocol_id'] = sequencing_protocol_id_list
     utils.write_to_wb(workbook, tab_name, sequence_file_tab)
 
+
 def get_project_main_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,geo_accession: str,tab_name: str) -> []:
     """
     Fills and writes a Project (main) tab with SRA study and Bioproject metadata obtained via a request to the NCBI SRA database
@@ -290,7 +295,7 @@ def get_project_main_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,
         tab = utils.get_empty_df(workbook,tab_name)
         bioproject = list(set(list(srp_metadata_update['BioProject'])))
         if len(bioproject) > 1:
-            print("more than 1 bioproject, check this")
+            log.info("more than 1 bioproject, check this")
         else:
             bioproject = bioproject[0]
         project_name,project_title,project_description,project_pubmed_id = utils.get_bioproject_metadata(bioproject)
@@ -303,6 +308,7 @@ def get_project_main_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,
     except AttributeError:
         pass
     return project_name, project_title, project_description, project_pubmed_id
+
 
 def get_project_publication_tab_xls(workbook: object,tab_name: str,project_pubmed_id: str) -> None:
     """
@@ -324,6 +330,7 @@ def get_project_publication_tab_xls(workbook: object,tab_name: str,project_pubme
                       'project.publications.url':''}, ignore_index=True)
     utils.write_to_wb(workbook, tab_name, tab)
 
+
 def get_project_contributors_tab_xls(workbook: object,tab_name: str,project_pubmed_id: str) -> None:
     """
     Function to fetch publication metadata, specifically about the publication contributors from an xml following a request to NCBI.
@@ -335,6 +342,7 @@ def get_project_contributors_tab_xls(workbook: object,tab_name: str,project_pubm
         affiliation = author[3]
         tab = tab.append({'project.contributors.name':name,'project.contributors.institution':affiliation}, ignore_index=True)
     utils.write_to_wb(workbook, tab_name, tab)
+
 
 def get_project_funders_tab_xls(workbook: object,tab_name: str,project_pubmed_id: str) -> None:
     """

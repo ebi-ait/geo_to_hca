@@ -1,17 +1,21 @@
-"""
-Import required modules.
-"""
+# --- core imports
 import argparse
-import multiprocessing
 from contextlib import contextmanager
+import logging
+import multiprocessing
+import os
+
+# --- third-party imports
 import pandas as pd
-import xml.etree.ElementTree as xm
 from openpyxl import Workbook
 from openpyxl.utils.cell import get_column_letter
-from openpyxl import load_workbook
 
-import utils.sra_utils as sra_utils
-import utils.get_attribs as get_attribs
+# ---application imports
+from geo_to_hca.utils import sra_utils
+from geo_to_hca.utils import get_attribs
+
+log = logging.getLogger(__name__)
+
 
 """
 Define functions.
@@ -41,7 +45,7 @@ def test_number_fastq_files(fastq_map: {}) -> {}:
         if all(test_number_files) is True:
             fastq_map = None
         elif any(test_number_files) is True:
-            print("Fastq file names for only some of the SRA run accessions are not available.")
+            log.info("Fastq file names for only some of the SRA run accessions are not available.")
     return fastq_map
 
 def get_pubmed_metadata(project_pubmed_id: str,iteration: int) -> []:

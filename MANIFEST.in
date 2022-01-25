@@ -1,0 +1,2 @@
+include template/*.xlsx
+include requirements.txt
