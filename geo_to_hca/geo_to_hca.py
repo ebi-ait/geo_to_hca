@@ -98,7 +98,7 @@ def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.
 
 
 def save_spreadsheet_to_file(workbook: Workbook, accession:str, output_dir: str):
-    logging.info(f"Done. Saving workbook to excel file")
+    log.info(f"Done. Saving workbook to excel file")
     out_file = f"{output_dir}/{accession}.xlsx"
     workbook.save(out_file)
 
@@ -249,7 +249,7 @@ def create_spreadsheet_using_geo_accessions(accession_list, output_dir: str, nth
 
 
 def prepare_logging():
-    log.basicConfig(stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+    logging.basicConfig(stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
