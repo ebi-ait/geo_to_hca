@@ -24,7 +24,7 @@ def fetch_srp_accession(geo_accession: str) -> str:
     Function to retrieve an SRA study accession given a GEO accession.
     """
     srp = sra_utils.SraUtils.get_srp_accession_from_geo(geo_accession)
-    if not srp.empty:
+    if srp and not srp.empty:
         if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
         elif srp.shape[0] > 1:
