@@ -31,9 +31,8 @@ def fetch_srp_accession(geo_accession: str) -> str:
             raise IndexError("More than 1 accession has been found. Please enter re-try with a single SRA Study "
                             "accession.")
     else:
-        raise IndexError(f"Could not find SRA accession for GEO accession {geo_accession} ; is it a GEO Superseries? If yes, please "
-                        f"re-try with a "
-                        "subseries accession")
+        raise IndexError(f"Could not find SRA accession for GEO accession {geo_accession}; is it a GEO super-series? "
+                         f"If yes, please re-try with a sub-series accession")
     return srp
 
 
