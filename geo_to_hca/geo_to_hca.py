@@ -31,7 +31,7 @@ def fetch_srp_accession(geo_accession: str) -> str:
             raise Exception("More than 1 accession has been found. Please enter re-try with a single SRA Study "
                             "accession.")
     else:
-        raise Exception(f"Could not SRA accession for GEO accession {geo_accession} ; is it a GEO Superseries? If yes, please "
+        raise Exception(f"Could not find SRA accession for GEO accession {geo_accession} ; is it a GEO Superseries? If yes, please "
                         f"re-try with a "
                         "subseries accession")
     return srp
