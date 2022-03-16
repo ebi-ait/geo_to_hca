@@ -109,6 +109,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
     Initialise a study accession string.
     """
     srp_accession = None
+    geo_accession = None
 
     """
     Check the study accession type. Is it a GEO database study accession or SRA study accession? if GEO, fetch the
@@ -116,6 +117,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
     """
 
     if 'GSE' in accession:
+        geo_accession = accession
         log.info(f"Fetching SRA study ID for GEO dataset {accession}")
         srp_accession = fetch_srp_accession(accession)
         log.info(f"Found SRA study ID: {srp_accession}")
@@ -205,7 +207,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
         """
         log.info(f"Getting project metadata")
         project_name, project_title, project_description, project_pubmed_id = get_tab.get_project_main_tab_xls(
-            srp_metadata_update, workbook, accession, tab_name="Project")
+            srp_metadata_update, workbook, geo_accession, tab_name="Project")
 
         try:
             """
