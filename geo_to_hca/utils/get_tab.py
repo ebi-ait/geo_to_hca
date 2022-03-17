@@ -287,7 +287,7 @@ def update_sequence_file_tab_xls(sequence_file_tab: pd.DataFrame,library_protoco
 def get_project_main_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,geo_accession: str,tab_name: str) -> []:
     """
     Fills and writes a Project (main) tab with SRA study and Bioproject metadata obtained via a request to the NCBI SRA database
-    with a bioporject accession.
+    with a bioproject accession.
     """
     study = list(srp_metadata_update['SRAStudy'])[0]
     project = list(srp_metadata_update['BioProject'])[0]
