@@ -2,7 +2,6 @@
 import re
 import xml.etree.ElementTree as xm
 from time import sleep
-from typing import Optional
 
 import pandas as pd
 import requests
