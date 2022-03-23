@@ -23,7 +23,7 @@ def fetch_srp_accession(geo_accession: str) -> str:
     """
     Function to retrieve an SRA study accession given a GEO accession.
     """
-    srp = sra_utils.SraUtils.get_srp_accession_from_geo(geo_accession)
+    srp = sra_utils.get_srp_accession_from_geo(geo_accession)
     if srp and not srp.empty:
         if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
@@ -40,7 +40,7 @@ def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     """
     Function to get various metadata from the SRA database given an SRA study accession.
     """
-    srp_metadata_df = sra_utils.SraUtils.get_srp_metadata(srp_accession)
+    srp_metadata_df = sra_utils.get_srp_metadata(srp_accession)
     return srp_metadata_df
 
 

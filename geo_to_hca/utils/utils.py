@@ -54,7 +54,7 @@ def get_pubmed_metadata(project_pubmed_id: str,iteration: int) -> []:
     A pubmed id is provided in the request url. If a project title or name is found but not publication title is found,
     a further request is sent to Europe PMC to try to find the publication title given the project title or project name.
     """
-    xml_content = sra_utils.SraUtils.request_pubmed_metadata(project_pubmed_id)
+    xml_content = sra_utils.request_pubmed_metadata(project_pubmed_id)
     title,author_list,grant_list,article_doi_id = get_attribs.get_attributes_pubmed(xml_content,iteration)
     return title,author_list,grant_list,article_doi_id
 
@@ -63,7 +63,7 @@ def get_bioproject_metadata(bioproject_accession: str) -> []:
     Function to fetch project metadata from an xml following a request to NCBI.
     An SRA Bioproject accession is provided in the request url.
     """
-    xml_content = sra_utils.SraUtils.request_bioproject_metadata(bioproject_accession)
+    xml_content = sra_utils.request_bioproject_metadata(bioproject_accession)
     project_name,project_title,project_description,project_pubmed_id = get_attribs.get_attributes_bioproject(xml_content,bioproject_accession)
     return project_name,project_title,project_description,project_pubmed_id
 
@@ -75,7 +75,7 @@ def get_experimental_metadata(accessions: [],accession_type: str) -> [[],str]:
     lists of accessions and a nested list will be returned. Otherwise, an unnested list will be returned.
     """
     if len(accessions) < 100:
-        xml = sra_utils.SraUtils.request_accession_info(accessions,accession_type=accession_type)
+        xml = sra_utils.request_accession_info(accessions,accession_type=accession_type)
         size = 'small'
         return xml,size
     else:
@@ -83,7 +83,7 @@ def get_experimental_metadata(accessions: [],accession_type: str) -> [[],str]:
         parts_list = split_list(accessions, n=100)
         xmls = []
         for p in range(0,len(parts_list)):
-            xml = sra_utils.SraUtils.request_accession_info(parts_list[p],accession_type=accession_type)
+            xml = sra_utils.request_accession_info(parts_list[p],accession_type=accession_type)
             xmls.append(xml)
         return xmls,size
 

@@ -92,11 +92,11 @@ def get_fastq_from_SRA(srr_accessions: []) -> {}:
     A list of SRA run accessions is given as input to the request. The fastq file paths are extracted from
     this xml and the file names are added to a dictionary with the associated run accessions as keys (fastq_map).
     """
-    xml_content = sra_utils.SraUtils.request_fastq_from_SRA(srr_accessions)
+    xml_content = sra_utils.request_fastq_from_SRA(srr_accessions)
     if not xml_content:
         fastq_map = None
     else:
-        experiment_packages = sra_utils.SraUtils.parse_xml_SRA_runs(xml_content)
+        experiment_packages = sra_utils.parse_xml_SRA_runs(xml_content)
         for experiment_package in experiment_packages:
             try:
                 fastq_map = get_file_names_from_SRA(experiment_package)
