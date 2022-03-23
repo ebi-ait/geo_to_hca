@@ -19,7 +19,7 @@ Define constants.
 STATUS_ERROR_CODE = 400
 
 """
-Functions to handle requests from NCBI SRA database via SRAweb() or NCBI eutils.
+Functions to handle requests from NCBI SRA database or NCBI eutils.
 """
 
 
@@ -28,6 +28,7 @@ def get_srp_accession_from_geo(geo_accession: str) -> Optional[str]:
     Function to retrieve an SRA database study accession for a given input GEO accession.
 
     Returns as soon as an accession is found. Could be the case that multiple accessions exist but only catering for
+    one accession.
     """
     regex = re.compile('^GSE.*$')
     if not regex.match(geo_accession):
