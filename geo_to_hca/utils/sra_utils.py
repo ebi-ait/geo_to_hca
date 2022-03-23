@@ -3,6 +3,8 @@ from time import sleep
 import xml.etree.ElementTree as xm
 
 # --- third-party imports
+from typing import Optional
+
 import pandas as pd
 from pysradb.sraweb import SRAweb
 import requests as rq
@@ -23,7 +25,7 @@ class SraUtils:
     """
     Class to handle requests from NCBI SRA database via SRAweb() or NCBI eutils.
     """
-    def get_srp_accession_from_geo(geo_accession: str) -> str:
+    def get_srp_accession_from_geo(geo_accession: str) -> Optional[pd.DataFrame]:
         """
         Function to retrieve an SRA database study accession for a given input GEO accession.
         """
@@ -34,11 +36,8 @@ class SraUtils:
             srp = None
         if not isinstance(srp, pd.DataFrame):
             srp = None
-        elif isinstance(srp, pd.DataFrame):
-            if srp.shape[0] == 0:
-                srp = None
-            else:
-                srp = srp
+        if isinstance(srp, pd.DataFrame) and srp.shape[0] == 0:
+            srp = None
         return srp
 
     def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
