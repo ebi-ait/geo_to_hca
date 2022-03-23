@@ -50,7 +50,7 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
             return [x['targetobject'] for x in extrelations if 'SRP' in x.get('targetobject', '')]
 
     except Exception as e:
-        raise Exception(f'Failed to get SRP accessions for {geo_accession}: {e}')
+        raise Exception(f'Failed to get SRP accessions: {e}')
 
 
 def get_srp_metadata(srp_accession: str) -> pd.DataFrame:

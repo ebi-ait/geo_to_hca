@@ -26,7 +26,7 @@ def fetch_srp_accession(geo_accession: str) -> str:
     """
     srp_accession = sra_utils.get_srp_accession_from_geo(geo_accession)
     if not srp_accession:
-        raise IndexError(f"Could not find SRA accession for GEO accession {geo_accession}; is it a GEO super-series? "
+        raise IndexError(f"Could not find SRA accession; is it a GEO super-series? "
                          f"If yes, please re-try with a sub-series accession")
     if len(srp_accession) > 1:
         raise IndexError("More than 1 accession has been found. Please re-try with a single SRA Study accession.")
@@ -123,7 +123,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
             srp_accession = accession
 
         if not srp_accession:
-            raise Exception(f"No SRA study accession is available for accession {accession}")
+            raise Exception(f"No SRA study accession is available")
 
         """
         Fetch the SRA study metadata for the srp accession.
