@@ -1,16 +1,17 @@
 # --- core imports
-from time import sleep
+import re
 import xml.etree.ElementTree as xm
-
-# --- third-party imports
+from time import sleep
 from typing import Optional
 
 import pandas as pd
-from pysradb.sraweb import SRAweb
+import requests
 import requests as rq
 
 # ---application imports
 from geo_to_hca.utils import handle_errors
+
+# --- third-party imports
 
 """
 Define constants.
@@ -18,24 +19,43 @@ Define constants.
 STATUS_ERROR_CODE = 400
 
 """
-Class to handle requests from NCBI SRA database via SRAweb() or NCBI eutils.
+Functions to handle requests from NCBI SRA database via SRAweb() or NCBI eutils.
 """
 
 
-def get_srp_accession_from_geo(geo_accession: str) -> Optional[pd.DataFrame]:
+def get_srp_accession_from_geo(geo_accession: str) -> Optional[str]:
     """
     Function to retrieve an SRA database study accession for a given input GEO accession.
+
+    Returns as soon as an accession is found. Could be the case that multiple accessions exist but only catering for
     """
-    sleep(0.5)
+    regex = re.compile('^GSE.*$')
+    if not regex.match(geo_accession):
+        raise AssertionError(f'{geo_accession} is not a valid GEO accession')
+
     try:
-        srp = SRAweb().gse_to_srp(geo_accession)
-    except:
-        srp = None
-    if not isinstance(srp, pd.DataFrame):
-        srp = None
-    if isinstance(srp, pd.DataFrame) and srp.shape[0] == 0:
-        srp = None
-    return srp
+        default_params = {
+            'db': 'gds',
+            'retmode': 'json'
+        }
+
+        r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
+                         params={**default_params, 'term': geo_accession})
+        r.raise_for_status()
+
+        for summary_id in r.json()['esearchresult']['idlist']:
+            r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi',
+                             params={**default_params, 'id': summary_id})
+            r.raise_for_status()
+
+            for r in (x for x in r.json()['result'].values() if type(x) is dict):
+                return next(
+                    (x['targetobject'] for x in r.get('extrelations') if 'SRP' in x.get('targetobject', '')),
+                    None
+                )
+
+    except Exception as e:
+        raise Exception(f'Failed to get SRP accessions for {geo_accession}: {e}')
 
 
 def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
