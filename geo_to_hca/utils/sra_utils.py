@@ -23,12 +23,9 @@ Functions to handle requests from NCBI SRA database or NCBI eutils.
 """
 
 
-def get_srp_accession_from_geo(geo_accession: str) -> Optional[str]:
+def get_srp_accession_from_geo(geo_accession: str) -> [str]:
     """
-    Function to retrieve an SRA database study accession for a given input GEO accession.
-
-    Returns as soon as an accession is found. Could be the case that multiple accessions exist but only catering for
-    one accession.
+    Function to retrieve any SRA database study accessions for a given input GEO accession.
     """
     regex = re.compile('^GSE.*$')
     if not regex.match(geo_accession):
@@ -49,11 +46,9 @@ def get_srp_accession_from_geo(geo_accession: str) -> Optional[str]:
                              params={**default_params, 'id': summary_id})
             r.raise_for_status()
 
-            for r in (x for x in r.json()['result'].values() if type(x) is dict):
-                return next(
-                    (x['targetobject'] for x in r.get('extrelations') if 'SRP' in x.get('targetobject', '')),
-                    None
-                )
+            results = [x for x in r.json()['result'].values() if type(x) is dict]
+            extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
+            return [x['targetobject'] for x in extrelations if 'SRP' in x.get('targetobject', '')]
 
     except Exception as e:
         raise Exception(f'Failed to get SRP accessions for {geo_accession}: {e}')
