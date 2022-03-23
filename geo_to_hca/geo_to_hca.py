@@ -30,7 +30,7 @@ def fetch_srp_accession(geo_accession: str) -> str:
                          f"If yes, please re-try with a sub-series accession")
     if len(srp_accession) > 1:
         raise IndexError("More than 1 accession has been found. Please re-try with a single SRA Study accession.")
-    return srp_accession
+    return srp_accession[0]
 
 
 def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
