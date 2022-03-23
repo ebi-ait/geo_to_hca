@@ -24,12 +24,12 @@ def fetch_srp_accession(geo_accession: str) -> str:
     Function to retrieve an SRA study accession given a GEO accession.
     """
     srp = sra_utils.get_srp_accession_from_geo(geo_accession)
-    if srp and not srp.empty:
+    if srp is not None and not srp.empty:
         if srp.shape[0] == 1:
             srp = srp.iloc[0]["study_accession"]
         elif srp.shape[0] > 1:
             raise IndexError("More than 1 accession has been found. Please enter re-try with a single SRA Study "
-                            "accession.")
+                             "accession.")
     else:
         raise IndexError(f"Could not find SRA accession for GEO accession {geo_accession}; is it a GEO super-series? "
                          f"If yes, please re-try with a sub-series accession")
