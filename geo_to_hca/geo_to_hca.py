@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+import re
 from pathlib import Path
 import sys
 
@@ -23,24 +24,20 @@ def fetch_srp_accession(geo_accession: str) -> str:
     """
     Function to retrieve an SRA study accession given a GEO accession.
     """
-    srp = sra_utils.SraUtils.get_srp_accession_from_geo(geo_accession)
-    if srp and not srp.empty:
-        if srp.shape[0] == 1:
-            srp = srp.iloc[0]["study_accession"]
-        elif srp.shape[0] > 1:
-            raise IndexError("More than 1 accession has been found. Please enter re-try with a single SRA Study "
-                            "accession.")
-    else:
-        raise IndexError(f"Could not find SRA accession for GEO accession {geo_accession}; is it a GEO super-series? "
+    srp_accession = sra_utils.get_srp_accession_from_geo(geo_accession)
+    if not srp_accession:
+        raise IndexError(f"Could not find SRA accession; is it a GEO super-series? "
                          f"If yes, please re-try with a sub-series accession")
-    return srp
+    if len(srp_accession) > 1:
+        raise IndexError("More than 1 accession has been found. Please re-try with a single SRA Study accession.")
+    return srp_accession[0]
 
 
 def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
     """
     Function to get various metadata from the SRA database given an SRA study accession.
     """
-    srp_metadata_df = sra_utils.SraUtils.get_srp_metadata(srp_accession)
+    srp_metadata_df = sra_utils.get_srp_metadata(srp_accession)
     return srp_metadata_df
 
 
@@ -64,18 +61,18 @@ def fetch_fastq_names(srp_accession: str, srr_accessions: []) -> {}:
     return fastq_map
 
 
-def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.DataFrame:
+def integrate_metadata(srp_metadata: pd.DataFrame, fastq_map: {}, cols: []) -> pd.DataFrame:
     """
     Integrates an input dataframe including study, sample, experiment and run accessions with extracted
     fastq file names which are stored in the input fastq_map dictionary. It uses the run accessions
     (dictionary keys) to map the fastq file names to the study metadata accessions in the dataframe.
     """
     srp_metadata_update = pd.DataFrame()
-    for index, row in srp_metadata.iterrows():
+    for _, row in srp_metadata.iterrows():
         srr_accession = row['Run']
         if not fastq_map or srr_accession not in fastq_map.keys():
             new_row = row.to_list()
-            new_row.extend(['','',''])
+            new_row.extend(['', '', ''])
             a_series = pd.Series(new_row)
             srp_metadata_update = srp_metadata_update.append(a_series, ignore_index=True)
         else:
@@ -88,7 +85,7 @@ def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.
                 else:
                     lane_index = ''
                 new_row = row.to_list()
-                new_row.extend([file,parse_reads.get_file_index(file),lane_index])
+                new_row.extend([file, parse_reads.get_file_index(file), lane_index])
                 a_series = pd.Series(new_row)
                 srp_metadata_update = srp_metadata_update.append(a_series, ignore_index=True)
     cols.extend(['fastq_name', 'file_index', 'lane_index'])
@@ -96,39 +93,38 @@ def integrate_metadata(srp_metadata: pd.DataFrame,fastq_map: {},cols: []) -> pd.
     return srp_metadata_update
 
 
-def save_spreadsheet_to_file(workbook: Workbook, accession:str, output_dir: str):
+def save_spreadsheet_to_file(workbook: Workbook, accession: str, output_dir: str):
     log.info(f"Done. Saving workbook to excel file")
     out_file = f"{output_dir}/{accession}.xlsx"
     workbook.save(out_file)
 
 
-def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=DEFAULT_HCA_TEMPLATE):
-    workbook = load_workbook(filename=hca_template)
+def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAULT_HCA_TEMPLATE):
+    try:
+        workbook = load_workbook(filename=hca_template)
 
-    """
-    Initialise a study accession string.
-    """
-    srp_accession = None
-    geo_accession = None
+        """
+        Initialise a study accession string.
+        """
+        srp_accession = None
+        geo_accession = None
 
-    """
-    Check the study accession type. Is it a GEO database study accession or SRA study accession? if GEO, fetch the
-    SRA study accession from the GEO accession.
-    """
+        """
+        Check the study accession type. Is it a GEO database study accession or SRA study accession? if GEO, fetch the
+        SRA study accession from the GEO accession.
+        """
 
-    if 'GSE' in accession:
-        geo_accession = accession
-        log.info(f"Fetching SRA study ID for GEO dataset {accession}")
-        srp_accession = fetch_srp_accession(accession)
-        log.info(f"Found SRA study ID: {srp_accession}")
+        if 'GSE' in accession:
+            geo_accession = accession
+            log.info(f"Fetching SRA study ID for GEO dataset {accession}")
+            srp_accession = fetch_srp_accession(accession)
+            log.info(f"Found SRA study ID: {srp_accession}")
+        elif 'SRP' in accession or 'ERP' in accession:
+            srp_accession = accession
 
-    elif 'SRP' in accession or 'ERP' in accession:
-        srp_accession = accession
+        if not srp_accession:
+            raise Exception(f"No SRA study accession is available")
 
-    if not srp_accession:
-        raise Exception(f"No SRA study accession is available for accession {accession}")
-
-    else:
         """
         Fetch the SRA study metadata for the srp accession.
         """
@@ -216,7 +212,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
             get_tab.get_project_publication_tab_xls(workbook, tab_name="Project - Publications",
                                                     project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            log.info(f'Publication attribute error with GEO project {accession}')
+            log.info(f'Publication attribute error with accession {accession}')
 
         try:
             """
@@ -225,7 +221,7 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
             get_tab.get_project_contributors_tab_xls(workbook, tab_name="Project - Contributors",
                                                      project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            log.info(f'Contributors attribute error with GEO project {accession}')
+            log.info(f'Contributors attribute error with accession {accession}')
 
         try:
             """
@@ -234,18 +230,20 @@ def create_spreadsheet_using_geo_accession(accession, nthreads= 1, hca_template=
             get_tab.get_project_funders_tab_xls(workbook, tab_name="Project - Funders",
                                                 project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            log.info(f'Funders attribute error with GEO project {accession}')
-    return workbook
+            log.info(f'Funders attribute error with accession {accession}')
+        return workbook
+    except Exception as e:
+        raise Exception(f'Error creating spreadsheet for accession {accession}. {e}')
 
 
-def create_spreadsheet_using_geo_accessions(accession_list, output_dir: str, nthreads=1,
-                                            hca_template=DEFAULT_HCA_TEMPLATE):
+def create_spreadsheet_using_accessions(accession_list, output_dir: str, nthreads=1,
+                                        hca_template=DEFAULT_HCA_TEMPLATE):
     """
     For each study accession provided, retrieve the relevant metadata from the SRA, ENA and EuropePMC databases and write to an
     HCA metadata spreadsheet.
     """
     for accession in accession_list:
-        workbook = create_spreadsheet_using_geo_accession(accession, nthreads, hca_template)
+        workbook = create_spreadsheet_using_accession(accession, nthreads, hca_template)
         save_spreadsheet_to_file(workbook, accession, output_dir)
 
 
@@ -270,7 +268,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--accession', type=str, help='accession (str): either GEO or SRA accession')
     parser.add_argument('--accession_list', type=utils.check_list_str, help='accession list (comma separated)')
-    parser.add_argument('--input_file', type=utils.check_file,help='optional path to tab-delimited input .txt file')
+    parser.add_argument('--input_file', type=utils.check_file, help='optional path to tab-delimited input .txt file')
     parser.add_argument('--nthreads', type=int, default=1,
                         help='number of multiprocessing processes to use')
     parser.add_argument('--template', default=DEFAULT_HCA_TEMPLATE,
@@ -304,9 +302,10 @@ def main():
         os.mkdir(args.output_dir)
 
     try:
-        create_spreadsheet_using_geo_accessions(accession_list, args.output_dir, args.nthreads, args.template)
+        create_spreadsheet_using_accessions(accession_list, args.output_dir, args.nthreads, args.template)
     except Exception:
         log.exception("")
+
 
 if __name__ == "__main__":
     main()

@@ -1,25 +1,22 @@
 # --- core imports
 import argparse
-from contextlib import contextmanager
 import logging
 import multiprocessing
 import os
+from contextlib import contextmanager
 
 # --- third-party imports
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.utils.cell import get_column_letter
 
+from geo_to_hca.utils import get_attribs
 # ---application imports
 from geo_to_hca.utils import sra_utils
-from geo_to_hca.utils import get_attribs
 
 log = logging.getLogger(__name__)
 
 
-"""
-Define functions.
-"""
 def split_list(accessions: [], n: int) -> []:
     """
     Function to split a list of SRA run accessions into a nested list containing smaller lists
@@ -32,6 +29,7 @@ def split_list(accessions: [], n: int) -> []:
         if part:
             parts_list.append(part)
     return parts_list
+
 
 def test_number_fastq_files(fastq_map: {}) -> {}:
     """
@@ -48,26 +46,30 @@ def test_number_fastq_files(fastq_map: {}) -> {}:
             log.info("Fastq file names for only some of the SRA run accessions are not available.")
     return fastq_map
 
-def get_pubmed_metadata(project_pubmed_id: str,iteration: int) -> []:
+
+def get_pubmed_metadata(project_pubmed_id: str, iteration: int) -> []:
     """
     Function to fetch publication metadata from an xml following a request to NCBI.
     A pubmed id is provided in the request url. If a project title or name is found but not publication title is found,
     a further request is sent to Europe PMC to try to find the publication title given the project title or project name.
     """
-    xml_content = sra_utils.SraUtils.request_pubmed_metadata(project_pubmed_id)
-    title,author_list,grant_list,article_doi_id = get_attribs.get_attributes_pubmed(xml_content,iteration)
-    return title,author_list,grant_list,article_doi_id
+    xml_content = sra_utils.request_pubmed_metadata(project_pubmed_id)
+    title, author_list, grant_list, article_doi_id = get_attribs.get_attributes_pubmed(xml_content, iteration)
+    return title, author_list, grant_list, article_doi_id
+
 
 def get_bioproject_metadata(bioproject_accession: str) -> []:
     """
     Function to fetch project metadata from an xml following a request to NCBI.
     An SRA Bioproject accession is provided in the request url.
     """
-    xml_content = sra_utils.SraUtils.request_bioproject_metadata(bioproject_accession)
-    project_name,project_title,project_description,project_pubmed_id = get_attribs.get_attributes_bioproject(xml_content,bioproject_accession)
-    return project_name,project_title,project_description,project_pubmed_id
+    xml_content = sra_utils.request_bioproject_metadata(bioproject_accession)
+    project_name, project_title, project_description, project_pubmed_id = get_attribs.get_attributes_bioproject(
+        xml_content, bioproject_accession)
+    return project_name, project_title, project_description, project_pubmed_id
 
-def get_experimental_metadata(accessions: [],accession_type: str) -> [[],str]:
+
+def get_experimental_metadata(accessions: [], accession_type: str) -> [[], str]:
     """
     Function to decide which accessions to send per request, if more than 1 is needed, to the SRA database
     via the request_info function. This decision is made based on the length of the accession list. If the accession list
@@ -75,24 +77,25 @@ def get_experimental_metadata(accessions: [],accession_type: str) -> [[],str]:
     lists of accessions and a nested list will be returned. Otherwise, an unnested list will be returned.
     """
     if len(accessions) < 100:
-        xml = sra_utils.SraUtils.request_accession_info(accessions,accession_type=accession_type)
+        xml = sra_utils.request_accession_info(accessions, accession_type=accession_type)
         size = 'small'
-        return xml,size
+        return xml, size
     else:
         size = 'large'
         parts_list = split_list(accessions, n=100)
         xmls = []
-        for p in range(0,len(parts_list)):
-            xml = sra_utils.SraUtils.request_accession_info(parts_list[p],accession_type=accession_type)
+        for p in range(0, len(parts_list)):
+            xml = sra_utils.request_accession_info(parts_list[p], accession_type=accession_type)
             xmls.append(xml)
-        return xmls,size
+        return xmls, size
 
-def fetch_experimental_metadata(accessions_list: [],accession_type: str) -> []:
+
+def fetch_experimental_metadata(accessions_list: [], accession_type: str) -> []:
     """
     Function to fetch metadata attributes associated with a list of either biosample or
     experiment accessions (biosample & experiment are accession types).
     """
-    xml_content_result,size = get_experimental_metadata(accessions_list,accession_type=accession_type)
+    xml_content_result, size = get_experimental_metadata(accessions_list, accession_type=accession_type)
     if size == 'large':
         nested_list = []
         if accession_type == 'biosample':
@@ -111,6 +114,7 @@ def fetch_experimental_metadata(accessions_list: [],accession_type: str) -> []:
                 nested_list.extend([get_attribs.get_attributes_library_protocol(experiment_package)])
     return nested_list
 
+
 @contextmanager
 def poolcontext(*args, **kwargs):
     """
@@ -120,6 +124,7 @@ def poolcontext(*args, **kwargs):
     yield pool
     pool.terminate()
 
+
 def check_list_str(values: str) -> []:
     """
     Checks if an input accession list is a list of comma-separated strings (accessions). Returns a list
@@ -128,6 +133,7 @@ def check_list_str(values: str) -> []:
     if "," not in values:
         raise argparse.ArgumentTypeError("Argument list not valid: comma separated list required")
     return values.split(',')
+
 
 def check_file(path: str) -> []:
     """
@@ -146,7 +152,8 @@ def check_file(path: str) -> []:
         raise argparse.ArgumentTypeError("accession list column not found in file %s" % (path))
     return geo_accession_list
 
-def get_empty_df(workbook: object,tab_name: str) -> pd.DataFrame:
+
+def get_empty_df(workbook: object, tab_name: str) -> pd.DataFrame:
     """
     Initialise an empty dataframe for the tab name specified. The tab name is a tab expected to be
     found in the HCA metadata spreadsheet (e.g. Collection protocol tab or Donor organism tab).
@@ -157,6 +164,7 @@ def get_empty_df(workbook: object,tab_name: str) -> pd.DataFrame:
     cols = empty_df.loc[0,]
     tab = pd.DataFrame(columns=cols)
     return tab
+
 
 def write_to_wb(workbook: Workbook, tab_name: str, tab_content: pd.DataFrame) -> None:
     """
