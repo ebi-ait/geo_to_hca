@@ -41,6 +41,7 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
         r.raise_for_status()
 
         for summary_id in r.json()['esearchresult']['idlist']:
+            sleep(0.5)  # Have to sleep so don't cause 429 error. Limit is 3/second
             r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi',
                              params={**default_params, 'id': summary_id})
             r.raise_for_status()

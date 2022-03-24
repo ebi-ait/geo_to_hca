@@ -8,7 +8,7 @@ install_requires = [line.rstrip() for line in (HERE / "requirements.txt").read_t
 
 setup(
     name="geo-to-hca",
-    version="1.0.9",
+    version="1.0.10",
     description="A tool to assist in the automatic conversion of geo metadata to hca metadata standard",
     long_description=README,
     long_description_content_type="text/markdown",
