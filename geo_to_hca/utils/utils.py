@@ -3,6 +3,7 @@ import argparse
 import logging
 import multiprocessing
 import os
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
 # --- third-party imports
@@ -113,16 +114,6 @@ def fetch_experimental_metadata(accessions_list: [], accession_type: str) -> []:
             for experiment_package in xml_content_result.findall('EXPERIMENT_PACKAGE'):
                 nested_list.extend([get_attribs.get_attributes_library_protocol(experiment_package)])
     return nested_list
-
-
-@contextmanager
-def poolcontext(*args, **kwargs):
-    """
-    Function for multiprocessing with number of threads, nthread (specified in optional arguments).
-    """
-    pool = multiprocessing.Pool(*args, **kwargs)
-    yield pool
-    pool.terminate()
 
 
 def check_list_str(values: str) -> []:

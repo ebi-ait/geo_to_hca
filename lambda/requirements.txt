@@ -1,0 +1,2 @@
+geo_to_hca
+git+https://github.com/ebi-ait/ingest-client.git@289a333#egg=hca_ingest

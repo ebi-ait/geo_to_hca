@@ -1,4 +1,5 @@
 # --- core imports
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import logging
 
@@ -67,11 +68,10 @@ def process_specimen_from_organism(biosample_attribute_list: [],srp_metadata_upd
     return df
 
 
-def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,nthreads: int,tab_name: str) -> None:
+def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,tab_name: str) -> None:
     """
     Fills Specimen from organism metadata fields based on sample metadata obtained via a request to NCBI SRA
-    database with biosample accessions. If specified number of threads nthreads > 1, this function will be
-    run in parallel with nthreads. Writes this tab.
+    database with biosample accessions. Writes this tab.
     """
     tab = utils.get_empty_df(workbook, tab_name)
     biosample_accessions = list(set(list(srp_metadata_update['BioSample'])))
@@ -79,11 +79,10 @@ def get_specimen_from_organism_tab_xls(srp_metadata_update: pd.DataFrame,workboo
     results = None
     if attribute_lists:
         try:
-            with utils.poolcontext(processes=nthreads) as pool:
-                results = pool.map(partial(process_specimen_from_organism, srp_metadata_update=srp_metadata_update), attribute_lists)
+            with ThreadPoolExecutor() as executor:
+                results = executor.map(partial(process_specimen_from_organism, srp_metadata_update=srp_metadata_update), attribute_lists)
         except KeyboardInterrupt:
             log.info("Process has been interrupted.")
-            pool.terminate()
     if results:
         df = pd.DataFrame(results)
         tab = tab.append(df,sort=True)

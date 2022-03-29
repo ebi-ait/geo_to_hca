@@ -99,7 +99,7 @@ def save_spreadsheet_to_file(workbook: Workbook, accession: str, output_dir: str
     workbook.save(out_file)
 
 
-def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAULT_HCA_TEMPLATE):
+def create_spreadsheet_using_accession(accession, hca_template=DEFAULT_HCA_TEMPLATE):
     try:
         workbook = load_workbook(filename=hca_template)
 
@@ -174,8 +174,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
         Get HCA Specimen from organism metadata: fetch as many fields as is possible using the above metadata accessions.
         """
         log.info(f"Getting Specimen from Organism tab")
-        get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update, workbook, nthreads,
-                                                   tab_name="Specimen from organism")
+        get_tab.get_specimen_from_organism_tab_xls(srp_metadata_update, workbook, tab_name="Specimen from organism")
 
         """
         Get HCA Library preparation protocol metadata: fetch as many fields as is possible using the above metadata accessions.
@@ -236,14 +235,13 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
         raise Exception(f'Error creating spreadsheet for accession {accession}. {e}')
 
 
-def create_spreadsheet_using_accessions(accession_list, output_dir: str, nthreads=1,
-                                        hca_template=DEFAULT_HCA_TEMPLATE):
+def create_spreadsheet_using_accessions(accession_list, output_dir: str,hca_template=DEFAULT_HCA_TEMPLATE):
     """
     For each study accession provided, retrieve the relevant metadata from the SRA, ENA and EuropePMC databases and write to an
     HCA metadata spreadsheet.
     """
     for accession in accession_list:
-        workbook = create_spreadsheet_using_accession(accession, nthreads, hca_template)
+        workbook = create_spreadsheet_using_accession(accession, hca_template)
         save_spreadsheet_to_file(workbook, accession, output_dir)
 
 
@@ -269,8 +267,6 @@ def main():
     parser.add_argument('--accession', type=str, help='accession (str): either GEO or SRA accession')
     parser.add_argument('--accession_list', type=utils.check_list_str, help='accession list (comma separated)')
     parser.add_argument('--input_file', type=utils.check_file, help='optional path to tab-delimited input .txt file')
-    parser.add_argument('--nthreads', type=int, default=1,
-                        help='number of multiprocessing processes to use')
     parser.add_argument('--template', default=DEFAULT_HCA_TEMPLATE,
                         help='path to an HCA spreadsheet template (xlsx)')
     parser.add_argument('--header_row', type=int, default=4,
@@ -302,7 +298,7 @@ def main():
         os.mkdir(args.output_dir)
 
     try:
-        create_spreadsheet_using_accessions(accession_list, args.output_dir, args.nthreads, args.template)
+        create_spreadsheet_using_accessions(accession_list, args.output_dir, args.template)
     except Exception:
         log.exception("")
 
