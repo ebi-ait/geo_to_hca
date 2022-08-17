@@ -1,4 +1,6 @@
 # --- core imports
+import logging
+import os
 import re
 import xml.etree.ElementTree as xm
 from time import sleep
@@ -8,6 +10,8 @@ import requests
 import requests as rq
 
 # ---application imports
+from requests import Request
+
 from geo_to_hca.utils import handle_errors
 
 # --- third-party imports
@@ -21,6 +25,9 @@ STATUS_ERROR_CODE = 400
 Functions to handle requests from NCBI SRA database or NCBI eutils.
 """
 
+EUTILS_HOST=os.getenv('EUTILS_HOST', default='https://eutils.ncbi.nlm.nih.gov')
+EUTILS_BASE_URL=os.getenv('EUTILS_BASE_URL', default=f'{EUTILS_HOST}/entrez/eutils')
+log = logging.getLogger(__name__)
 
 def get_srp_accession_from_geo(geo_accession: str) -> [str]:
     """
@@ -36,13 +43,13 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
             'retmode': 'json'
         }
 
-        r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
+        r = requests.get(f'{EUTILS_BASE_URL}/esearch.fcgi',
                          params={**default_params, 'term': geo_accession})
         r.raise_for_status()
 
         for summary_id in r.json()['esearchresult']['idlist']:
             sleep(0.5)  # Have to sleep so don't cause 429 error. Limit is 3/second
-            r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi',
+            r = requests.get(f'{EUTILS_BASE_URL}/esummary.fcgi',
                              params={**default_params, 'id': summary_id})
             r.raise_for_status()
 
@@ -60,8 +67,33 @@ def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
     associated with a particular SRA study accession from the SRA database.
     """
     sleep(0.5)
-    srp_metadata_url = f'http://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term={srp_accession}'
-    return pd.read_csv(srp_metadata_url)
+    esearch_result = get_entrez_esearch(srp_accession)
+    efetch_request = Request(method='GET',
+                             url=f'{EUTILS_BASE_URL}/efetch.fcgi',
+                             params={
+                                 "db": "sra",
+                                 "query_key": esearch_result['querykey'],
+                                 "WebEnv": esearch_result['webenv'],
+                                 "rettype": "runinfo",
+                                 "retmode": "text",
+                             }).prepare()
+    log.debug(f'srp_metadata url: {efetch_request.url}')
+    return pd.read_csv(efetch_request.url)
+
+
+def get_entrez_esearch(srp_accession):
+    r = requests.get(url=f'{EUTILS_BASE_URL}/esearch.fcgi',
+                     params={
+                         "db": "sra",
+                         "term": srp_accession,
+                         "usehistory": "y",
+                         "format": "json",
+                     })
+    log.debug(f'esearch url:  {r.url}')
+    log.debug(f'esearch response status:  {r.status_code}')
+    log.debug(f'esearch response content:  {r.text}')
+    r.raise_for_status()
+    return r.json()['esearchresult']
 
 
 def parse_xml_SRA_runs(xml_content: object) -> object:
@@ -75,8 +107,14 @@ def request_fastq_from_SRA(srr_accessions: []) -> object:
     In particular, the xml contains the paths to the data (if available) in fastq or other format.
     """
     sleep(0.5)
-    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}'
-    srr_metadata_url = rq.get(url)
+    esearch_result = get_entrez_esearch(",".join(srr_accessions))
+    srr_metadata_url = rq.get(f'{EUTILS_BASE_URL}/efetch/fcgi',
+                              params={
+                                  "db": "sra",
+                                  "WebEnv": esearch_result['webenv'],
+                                  "query_key": esearch_result['querykey'],
+                                  "id": ",".join(srr_accessions)
+                              })
     if srr_metadata_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundSRA(srr_metadata_url, srr_accessions)
     try:
@@ -92,9 +130,9 @@ def request_accession_info(accessions: [], accession_type: str) -> object:
     given list of biosample or experiment accessions. The xml contains various metadata fields.
     """
     if accession_type == 'biosample':
-        url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=biosample&id={",".join(accessions)}'
+        url = f'{EUTILS_BASE_URL}/efetch/fcgi?db=biosample&id={",".join(accessions)}'
     if accession_type == 'experiment':
-        url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(accessions)}'
+        url = f'{EUTILS_BASE_URL}/efetch/fcgi?db=sra&id={",".join(accessions)}'
     sra_url = rq.get(url)
     if sra_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundSRA(sra_url, accessions)
@@ -107,7 +145,7 @@ def request_bioproject_metadata(bioproject_accession: str):
     """
     sleep(0.5)
     srp_bioproject_url = rq.get(
-        f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=bioproject&id={bioproject_accession}')
+        f'{EUTILS_BASE_URL}/efetch/fcgi?db=bioproject&id={bioproject_accession}')
     if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundSRA(srp_bioproject_url, bioproject_accession)
     return xm.fromstring(srp_bioproject_url.content)
@@ -119,7 +157,7 @@ def request_pubmed_metadata(project_pubmed_id: str):
     """
     sleep(0.5)
     pubmed_url = rq.get(
-        f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
+        f'{EUTILS_BASE_URL}/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
     if pubmed_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundSRA(pubmed_url, project_pubmed_id)
     return xm.fromstring(pubmed_url.content)
