@@ -90,7 +90,7 @@ def save_spreadsheet_to_file(workbook: Workbook, accession: str, output_dir: str
 def set_workbook_properties(accession, workbook):
     workbook.properties.title = f'hca metadata for project from accession {accession}'
     workbook.properties.version = '1.0.12'
-    workbook.properties.keywords = f'hca,metadata,{accession}'
+    workbook.properties.keywords = f'hca,metadata,{accession},geo-to-hca-1.0.12'
     workbook.properties.creator = 'geo-to-hca'
     workbook.properties.lastModifiedBy = 'geo-to-hca'
     workbook.properties.created = datetime.now()
