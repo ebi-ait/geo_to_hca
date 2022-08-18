@@ -1,8 +1,8 @@
 # --- core imports
 import argparse
+from datetime import datetime
 import logging
 import os
-import re
 from pathlib import Path
 import sys
 
@@ -18,19 +18,6 @@ from geo_to_hca.utils import utils
 
 DEFAULT_HCA_TEMPLATE = Path(__file__).resolve().parents[1] / "template/hca_template.xlsx"
 log = logging.getLogger(__name__)
-
-
-def fetch_srp_accession(geo_accession: str) -> str:
-    """
-    Function to retrieve an SRA study accession given a GEO accession.
-    """
-    srp_accession = sra_utils.get_srp_accession_from_geo(geo_accession)
-    if not srp_accession:
-        raise IndexError(f"Could not find SRA accession; is it a GEO super-series? "
-                         f"If yes, please re-try with a sub-series accession")
-    if len(srp_accession) > 1:
-        raise IndexError("More than 1 accession has been found. Please re-try with a single SRA Study accession.")
-    return srp_accession[0]
 
 
 def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
@@ -96,7 +83,18 @@ def integrate_metadata(srp_metadata: pd.DataFrame, fastq_map: {}, cols: []) -> p
 def save_spreadsheet_to_file(workbook: Workbook, accession: str, output_dir: str):
     log.info(f"Done. Saving workbook to excel file")
     out_file = f"{output_dir}/{accession}.xlsx"
+    set_workbook_properties(accession, workbook)
     workbook.save(out_file)
+
+
+def set_workbook_properties(accession, workbook):
+    workbook.properties.title = f'hca metadata for project from accession {accession}'
+    workbook.properties.version = '1.0.12'
+    workbook.properties.keywords = f'hca,metadata,{accession}'
+    workbook.properties.creator = 'geo-to-hca'
+    workbook.properties.lastModifiedBy = 'geo-to-hca'
+    workbook.properties.created = datetime.now()
+    workbook.properties.modified = datetime.now()
 
 
 def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAULT_HCA_TEMPLATE):
@@ -117,7 +115,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
         if 'GSE' in accession:
             geo_accession = accession
             log.info(f"Fetching SRA study ID for GEO dataset {accession}")
-            srp_accession = fetch_srp_accession(accession)
+            srp_accession = sra_utils.get_srp_accession_from_geo(accession)
             log.info(f"Found SRA study ID: {srp_accession}")
         elif 'SRP' in accession or 'ERP' in accession:
             srp_accession = accession
@@ -233,7 +231,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
             log.info(f'Funders attribute error with accession {accession}')
         return workbook
     except Exception as e:
-        raise Exception(f'Error creating spreadsheet for accession {accession}. {e}')
+        raise Exception(f'Error creating spreadsheet for accession {accession}. {e}') from e
 
 
 def create_spreadsheet_using_accessions(accession_list, output_dir: str, nthreads=1,
@@ -303,8 +301,8 @@ def main():
 
     try:
         create_spreadsheet_using_accessions(accession_list, args.output_dir, args.nthreads, args.template)
-    except Exception:
-        log.exception("")
+    except Exception as e:
+        log.exception(e)
 
 
 if __name__ == "__main__":

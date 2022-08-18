@@ -8,4 +8,4 @@ publish:
 	twine upload dist/*
 
 clean:
-	rm -rf dist/
+	rm -rf dist/ output/ *.egg-info/

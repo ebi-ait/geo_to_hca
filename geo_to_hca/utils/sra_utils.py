@@ -25,9 +25,12 @@ STATUS_ERROR_CODE = 400
 Functions to handle requests from NCBI SRA database or NCBI eutils.
 """
 
+
+NCBI_WEB_HOST=os.getenv('EUTILS_HOST', default='https://www.ncbi.nlm.nih.gov')
 EUTILS_HOST=os.getenv('EUTILS_HOST', default='https://eutils.ncbi.nlm.nih.gov')
 EUTILS_BASE_URL=os.getenv('EUTILS_BASE_URL', default=f'{EUTILS_HOST}/entrez/eutils')
 log = logging.getLogger(__name__)
+
 
 def get_srp_accession_from_geo(geo_accession: str) -> [str]:
     """
@@ -53,12 +56,25 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
                              params={**default_params, 'id': summary_id})
             r.raise_for_status()
 
-            results = [x for x in r.json()['result'].values() if type(x) is dict]
-            extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
-            return [x['targetobject'] for x in extrelations if 'SRP' in x.get('targetobject', '')]
+            related_study = find_related_study(geo_accession, r)
+            return related_study
 
     except Exception as e:
-        raise Exception(f'Failed to get SRP accessions: {e}')
+        raise Exception(f'Failed to get SRP accessions for GEO accession {geo_accession}: {e}')
+
+
+def find_related_study(geo_accession, esummary_response):
+    results = [x for x in esummary_response.json()['result'].values() if type(x) is dict]
+    extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
+    related_studies = [relation['targetobject'] for relation in extrelations if 'SRP' in relation.get('targetobject', '')]
+    if not related_studies:
+        raise ValueError(f"Could not find an SRA study associated with Geo accession {geo_accession}. "
+                         f"Go to {NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and check if a study is "
+                         f"linked to a sample via an experiment (SRX...). You could use that study with the "
+                         f"geo-to-hca tool.")
+    if len(related_studies) > 1:
+        raise ValueError(f"More than a single accession has been found associated with Geo accession {geo_accession}")
+    return related_studies[0]
 
 
 def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
