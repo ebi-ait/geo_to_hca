@@ -26,7 +26,7 @@ Functions to handle requests from NCBI SRA database or NCBI eutils.
 """
 
 
-NCBI_WEB_HOST=os.getenv('EUTILS_HOST', default='https://www.ncbi.nlm.nih.gov')
+NCBI_WEB_HOST=os.getenv('NCBI_WEB_HOST', default='https://www.ncbi.nlm.nih.gov')
 EUTILS_HOST=os.getenv('EUTILS_HOST', default='https://eutils.ncbi.nlm.nih.gov')
 EUTILS_BASE_URL=os.getenv('EUTILS_BASE_URL', default=f'{EUTILS_HOST}/entrez/eutils')
 log = logging.getLogger(__name__)
@@ -41,40 +41,91 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
         raise AssertionError(f'{geo_accession} is not a valid GEO accession')
 
     try:
-        default_params = {
-            'db': 'gds',
-            'retmode': 'json'
-        }
+        response_json = call_esearch(geo_accession, db='gds')
 
-        r = requests.get(f'{EUTILS_BASE_URL}/esearch.fcgi',
-                         params={**default_params, 'term': geo_accession})
-        r.raise_for_status()
+        for summary_id in response_json['idlist']:
+            related_study = find_related_object(summary_id, accession_type='SRP')
+            if related_study:
+                return related_study
 
-        for summary_id in r.json()['esearchresult']['idlist']:
-            sleep(0.5)  # Have to sleep so don't cause 429 error. Limit is 3/second
-            r = requests.get(f'{EUTILS_BASE_URL}/esummary.fcgi',
-                             params={**default_params, 'id': summary_id})
-            r.raise_for_status()
-
-            related_study = find_related_study(geo_accession, r)
-            return related_study
+            for sample in find_related_samples(summary_id):
+                sample_esearch_result = call_esearch(sample['accession'], db='gds')
+                for sample_id in sample_esearch_result['idlist']:
+                    experiment_accession = find_related_object(sample_id, accession_type='SRX')
+                    if experiment_accession:
+                        log.debug(f'sample {sample["accession"]} is linked to experiment {experiment_accession}')
+                        related_study = find_study_by_experiment_accession(experiment_accession)
+                        if related_study:
+                            return related_study
+        raise no_related_study_err(geo_accession)
 
     except Exception as e:
         raise Exception(f'Failed to get SRP accessions for GEO accession {geo_accession}: {e}')
 
 
-def find_related_study(geo_accession, esummary_response):
+def find_study_by_experiment_accession(experiment_accession):
+    # search for accession in sra db using esearch
+    experiment_esearch_result = call_esearch(experiment_accession, db='sra')
+    # call esummary on sra db with the given id
+    experiment_id = experiment_esearch_result['idlist'][0]
+    experiment_esummary_result = call_esummary(experiment_id, db='sra')
+    # read xml from expxml attribute
+    experiment_xml = xm.fromstring(f"<experiment>{experiment_esummary_result['result'][experiment_id]['expxml']}</experiment>")
+    related_study = experiment_xml.find('Study').attrib['acc']
+    return related_study
+
+
+def call_esearch(geo_accession, db='gds'):
+    r = requests.get(f'{EUTILS_BASE_URL}/esearch.fcgi',
+                     params={
+                         'db': db,
+                         'retmode': 'json',
+                         'term': geo_accession})
+    r.raise_for_status()
+    response_json = r.json()
+    return response_json['esearchresult']
+
+
+def no_related_study_err(geo_accession):
+    return ValueError(f"Could not find an an object with accession type SRP associated with "
+                      f"the given accession {geo_accession}. "
+                      f"Go to {NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and if possible, find"
+                      f"the related study accession, and run the tool with it.")
+
+
+def find_related_samples(accession):
+    sleep(0.5)  # Have to sleep so don't cause 429 error. Limit is 3/second
+    esummary_response = requests.get(f'{EUTILS_BASE_URL}/esummary.fcgi',
+                                     params={'db': 'gds',
+                                             'retmode': 'json',
+                                             'id': accession})
+    esummary_response.raise_for_status()
     results = [x for x in esummary_response.json()['result'].values() if type(x) is dict]
+    return results[0]['samples']
+
+
+def find_related_object(accession, accession_type):
+    sleep(0.5)  # Have to sleep so don't cause 429 error. Limit is 3/second
+    esummary_response_json = call_esummary(accession, db='gds')
+    results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
     extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
-    related_studies = [relation['targetobject'] for relation in extrelations if 'SRP' in relation.get('targetobject', '')]
-    if not related_studies:
-        raise ValueError(f"Could not find an SRA study associated with Geo accession {geo_accession}. "
-                         f"Go to {NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and check if a study is "
-                         f"linked to a sample via an experiment (SRX...). You could use that study with the "
-                         f"geo-to-hca tool.")
-    if len(related_studies) > 1:
-        raise ValueError(f"More than a single accession has been found associated with Geo accession {geo_accession}")
-    return related_studies[0]
+
+    related_objects = [relation['targetobject'] for relation in extrelations if accession_type in relation.get('targetobject', '')]
+    if not related_objects:
+        return None
+    if len(related_objects) > 1:
+        raise ValueError(f"More than a single related object has been found associated with accession {accession}")
+    return related_objects[0]
+
+
+def call_esummary(accession, db='gds'):
+    esummary_response = requests.get(f'{EUTILS_BASE_URL}/esummary.fcgi',
+                                     params={'db': db,
+                                             'retmode': 'json',
+                                             'id': accession})
+    esummary_response.raise_for_status()
+    esummary_response_json = esummary_response.json()
+    return esummary_response_json
 
 
 def get_srp_metadata(srp_accession: str) -> pd.DataFrame:

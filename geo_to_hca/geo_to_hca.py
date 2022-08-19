@@ -21,14 +21,6 @@ DEFAULT_HCA_TEMPLATE = Path(__file__).resolve().parents[1] / "template/hca_templ
 log = logging.getLogger(__name__)
 
 
-def fetch_srp_metadata(srp_accession: str) -> pd.DataFrame:
-    """
-    Function to get various metadata from the SRA database given an SRA study accession.
-    """
-    srp_metadata_df = sra_utils.get_srp_metadata(srp_accession)
-    return srp_metadata_df
-
-
 def fetch_fastq_names(srp_accession: str, srr_accessions: []) -> {}:
     """
     Function to try and get fastq file names from the SRA database or if not available, from the ENA
@@ -128,7 +120,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
         Fetch the SRA study metadata for the srp accession.
         """
         log.info(f"Fetching study metadata for SRA study ID: {srp_accession}")
-        srp_metadata = fetch_srp_metadata(srp_accession)
+        srp_metadata = sra_utils.get_srp_metadata(srp_accession)
 
         """
         Save the column names for later.
