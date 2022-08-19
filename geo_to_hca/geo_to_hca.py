@@ -11,6 +11,7 @@ import pandas as pd
 from openpyxl import load_workbook, Workbook
 
 # --- application imports
+from geo_to_hca import version
 from geo_to_hca.utils import get_tab
 from geo_to_hca.utils import parse_reads
 from geo_to_hca.utils import sra_utils
@@ -89,10 +90,10 @@ def save_spreadsheet_to_file(workbook: Workbook, accession: str, output_dir: str
 
 def set_workbook_properties(accession, workbook):
     workbook.properties.title = f'hca metadata for project from accession {accession}'
-    workbook.properties.version = '1.0.12'
-    workbook.properties.keywords = f'hca,metadata,{accession},geo-to-hca-1.0.12'
-    workbook.properties.creator = 'geo-to-hca'
-    workbook.properties.lastModifiedBy = 'geo-to-hca'
+    workbook.properties.version = version
+    workbook.properties.keywords = f'hca,metadata,{accession},{__package__}-{version}'
+    workbook.properties.creator = __package__
+    workbook.properties.lastModifiedBy = __package__
     workbook.properties.created = datetime.now()
     workbook.properties.modified = datetime.now()
 
@@ -260,6 +261,7 @@ def prepare_logging():
 
 def main():
     prepare_logging()
+    log.info(f'using {__package__}-{version}')
     """
     Parse user-provided command-line arguments.
     """
