@@ -135,7 +135,11 @@ def get_attributes_library_protocol(experiment_package: object) -> []:
         library_descriptors = experiment.find('LIBRARY_DESCRIPTOR')
         if library_descriptors:
             desc = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL')
-            library_construction_protocol = desc.text
+            if desc and hasattr(desc, 'text'):
+                library_construction_protocol = desc.text
+            else:
+                library_construction_protocol = ''
+
         else:
             library_construction_protocol = ''
         illumina = experiment.find('ILLUMINA')
