@@ -39,6 +39,7 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
             if related_study:
                 return related_study
 
+            # NOTE: this is a bit too complex, requires some cleanup
             for sample in find_related_samples(summary_id):
                 sample_esearch_result = call_esearch(sample['accession'], db='gds')
                 for sample_id in sample_esearch_result['idlist']:
