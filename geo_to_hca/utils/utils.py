@@ -10,6 +10,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.utils.cell import get_column_letter
 
+import geo_to_hca.utils.entrez_client
 from geo_to_hca.utils import get_attribs
 # ---application imports
 from geo_to_hca.utils import sra_utils
@@ -53,7 +54,7 @@ def get_pubmed_metadata(project_pubmed_id: str, iteration: int) -> []:
     A pubmed id is provided in the request url. If a project title or name is found but not publication title is found,
     a further request is sent to Europe PMC to try to find the publication title given the project title or project name.
     """
-    xml_content = sra_utils.request_pubmed_metadata(project_pubmed_id)
+    xml_content = geo_to_hca.utils.entrez_client.request_pubmed_metadata(project_pubmed_id)
     title, author_list, grant_list, article_doi_id = get_attribs.get_attributes_pubmed(xml_content, iteration)
     return title, author_list, grant_list, article_doi_id
 
@@ -63,7 +64,7 @@ def get_bioproject_metadata(bioproject_accession: str) -> []:
     Function to fetch project metadata from an xml following a request to NCBI.
     An SRA Bioproject accession is provided in the request url.
     """
-    xml_content = sra_utils.request_bioproject_metadata(bioproject_accession)
+    xml_content = geo_to_hca.utils.entrez_client.request_bioproject_metadata(bioproject_accession)
     project_name, project_title, project_description, project_pubmed_id = get_attribs.get_attributes_bioproject(
         xml_content, bioproject_accession)
     return project_name, project_title, project_description, project_pubmed_id

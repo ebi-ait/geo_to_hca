@@ -1,3 +1,4 @@
+import os
 import xml.etree.ElementTree as xm
 
 """
@@ -42,3 +43,13 @@ class NotFoundENA(Exception):
         return (f"\nStatus code of the request: {self.response.status_code}.\n"
                 f"Error as returned by ENA:\n{self.error}"
                 f"The provided project title or name was:\n{self.title}\n\n")
+
+
+def no_related_study_err(geo_accession):
+    return ValueError(f"Could not find an an object with accession type SRP associated with "
+                      f"the given accession {geo_accession}. "
+                      f"Go to {NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and if possible, find "
+                      f"the related study accession, and run the tool with it.")
+
+
+NCBI_WEB_HOST=os.getenv('NCBI_WEB_HOST', default='https://www.ncbi.nlm.nih.gov')
