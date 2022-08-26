@@ -7,7 +7,7 @@ setup:
 dist: setup.py $(SRC_FILES)
 	python setup.py sdist
 
-publish:
+publish: dist
 	twine upload dist/*
 
 clean:

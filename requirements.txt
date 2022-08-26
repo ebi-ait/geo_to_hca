@@ -1,5 +1,5 @@
-requests
-pandas
-openpyxl
-pyyaml
 contextlib2
+openpyxl
+pandas
+pyyaml
+requests
