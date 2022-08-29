@@ -2,14 +2,13 @@
 import logging
 import re
 import xml.etree.ElementTree as xm
-from time import sleep
 
 import pandas as pd
 
 # ---application imports
 
 # --- third-party imports
-from geo_to_hca.utils.entrez_client import EUTILS_BASE_URL, call_esearch, call_esummary, get_entrez_esearch, call_efetch
+from geo_to_hca.utils.entrez_client import call_esearch, call_esummary, get_entrez_esearch, call_efetch
 from geo_to_hca.utils.handle_errors import no_related_study_err
 
 """
@@ -60,7 +59,6 @@ def find_study_by_experiment_accession(experiment_accession):
     experiment_esearch_result = call_esearch(experiment_accession, db='sra')
     # call esummary on sra db with the given id
     experiment_id = experiment_esearch_result['idlist'][0]
-    sleep(.4)
     experiment_esummary_result = call_esummary(experiment_id, db='sra')
     # read xml from expxml attribute
     experiment_xml = xm.fromstring(f"<experiment>{experiment_esummary_result['result'][experiment_id]['expxml']}</experiment>")
@@ -69,14 +67,12 @@ def find_study_by_experiment_accession(experiment_accession):
 
 
 def find_related_samples(accession):
-    sleep(0.4)  # Have to sleep so don't cause 429 error. Limit is 3/second
     esummary_response_json = call_esummary(accession)
     results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
     return results[0]['samples']
 
 
 def find_related_object(accession, accession_type):
-    sleep(0.4)  # Have to sleep so don't cause 429 error. Limit is 3/second
     esummary_response_json = call_esummary(accession, db='gds')
     results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
     extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
@@ -94,7 +90,6 @@ def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
     Function to retrieve a dataframe with multiple lists of experimental and sample accessions
     associated with a particular SRA study accession from the SRA database.
     """
-    sleep(0.5)
     esearch_result = get_entrez_esearch(srp_accession)
     efetch_request = call_efetch(db="sra",
                                  query_key=esearch_result['querykey'],
@@ -116,7 +111,6 @@ def request_fastq_from_SRA(srr_accessions: []) -> object:
     Function to retrieve an xml file containing information associated with a list of NCBI SRA run accessions.
     In particular, the xml contains the paths to the data (if available) in fastq or other format.
     """
-    sleep(0.5)
     esearch_result = get_entrez_esearch(",".join(srr_accessions))
     srr_metadata_url = call_efetch(db='sra',
                                    accessions=srr_accessions,
