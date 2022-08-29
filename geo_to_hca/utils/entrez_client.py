@@ -22,7 +22,7 @@ def throttle():
     see dcp-838
     """
     # eutils allows 3 calls per second, otherwise they return 429
-    sleep(0.5)
+    sleep(0.6)
 
 
 def call_esearch(geo_accession, db='gds'):
