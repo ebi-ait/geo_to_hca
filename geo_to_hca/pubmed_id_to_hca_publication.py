@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.cell import get_column_letter
 
 from geo_to_hca.utils.entrez_client import call_efetch
+from geo_to_hca.utils.handle_errors import NotFoundENA
 
 STATUS_ERROR_CODE = 400
 

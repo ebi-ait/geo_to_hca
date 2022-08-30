@@ -190,6 +190,7 @@ def get_attributes_bioproject(xml_content: object, bioproject_accession: str) ->
 
 def search_europepmc_for_publication(project_title, key):
     log.info('searching europepmc for publication')
+    project_pubmed_id = ''
     if project_title:
         log.info(f"{key} is: {project_title}")
         url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search',
@@ -200,7 +201,6 @@ def search_europepmc_for_publication(project_title, key):
         # in geo.
         # Enrique's process is to serach for the matching titles from EuroPMC
         # in google and if the text is available look for the geo accession
-        project_pubmed_id = ''
         if url.status_code == STATUS_ERROR_CODE:
             raise handle_errors.NotFoundENA(url, project_title)
         else:
