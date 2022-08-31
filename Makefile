@@ -3,7 +3,8 @@ SRC_FILES := $(shell find $(TOOL_NAME) -name \*.py -print)
 
 .PHONY: setup
 setup:
-	pip install -r requirements-dev.txt
+	pip install pip-tools
+	pip-sync requirements.txt requriements-dev.txt
 
 dist: setup.py $(SRC_FILES)
 	python setup.py sdist
