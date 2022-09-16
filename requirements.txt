@@ -9,25 +9,25 @@ certifi==2022.6.15
 charset-normalizer==2.0.12
     # via requests
 contextlib2==21.6.0
-    # via geo-to-hca (setup.py)
+    # via -r requirements.in
 et-xmlfile==1.1.0
     # via openpyxl
 idna==3.3
     # via requests
-numpy==1.19.5
+numpy==1.22.0
     # via pandas
 openpyxl==3.0.10
-    # via geo-to-hca (setup.py)
+    # via -r requirements.in
 pandas==1.1.5
-    # via geo-to-hca (setup.py)
+    # via -r requirements.in
 python-dateutil==2.8.2
     # via pandas
 pytz==2022.2.1
     # via pandas
 pyyaml==6.0
-    # via geo-to-hca (setup.py)
+    # via -r requirements.in
 requests==2.27.1
-    # via geo-to-hca (setup.py)
+    # via -r requirements.in
 six==1.16.0
     # via python-dateutil
 urllib3==1.26.12
