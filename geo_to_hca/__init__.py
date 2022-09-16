@@ -1,3 +1,1 @@
-import logging
-from logging import NullHandler
-logging.getLogger(__name__).addHandler(NullHandler())
+version = '1.0.19'

@@ -1,19 +1,15 @@
-from pysradb.sraweb import SRAweb
-from time import sleep
-import requests as rq
-import pandas as pd
-import xml.etree.ElementTree as xm
-from openpyxl import Workbook
-from openpyxl.utils.cell import get_column_letter
-from openpyxl import load_workbook
-import os,sys
-import re
 import argparse
-import multiprocessing
-from functools import partial
-from contextlib import contextmanager
-import itertools
-from itertools import chain
+import os
+import xml.etree.ElementTree as xm
+
+import pandas as pd
+import requests as rq
+from openpyxl import Workbook
+from openpyxl import load_workbook
+from openpyxl.utils.cell import get_column_letter
+
+from geo_to_hca.utils.entrez_client import call_efetch
+from geo_to_hca.utils.handle_errors import NotFoundENA
 
 STATUS_ERROR_CODE = 400
 
@@ -36,11 +32,8 @@ class SraUtils:
 
     @staticmethod
     def pubmed_id(project_pubmed_id):
-        sleep(0.5)
-        pubmed_url = rq.get(f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
-        if pubmed_url.status_code == STATUS_ERROR_CODE:
-            raise NotFoundSRA(pubmed_url, project_pubmed_id)
-        return xm.fromstring(pubmed_url.content)
+        pubmed_response = call_efetch(db='pubmed', accessions=project_pubmed_id, rettype='xml')
+        return xm.fromstring(pubmed_response.content)
 
 def fetch_bioproject(bioproject_accession: str):
     xml_content = SraUtils.srp_bioproject(bioproject_accession)
