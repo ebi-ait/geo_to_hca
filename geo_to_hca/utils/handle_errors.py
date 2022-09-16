@@ -1,9 +1,8 @@
-import os
 import xml.etree.ElementTree as xm
 
-"""
-Define functions.
-"""
+from geo_to_hca import config
+
+
 class NotFoundSRA(Exception):
     """
     Sub-class for Exception to handle 400 error status codes.
@@ -25,6 +24,7 @@ class NotFoundSRA(Exception):
         return (f"\nStatus code of the request: {self.response.status_code}.\n"
                 f"Error as returned by SRA:\n{self.error}"
                 f"The provided accessions were:\n{accession_string}\n\n")
+
 
 class NotFoundENA(Exception):
     """
@@ -48,8 +48,17 @@ class NotFoundENA(Exception):
 def no_related_study_err(geo_accession):
     return ValueError(f"Could not find an an object with accession type SRP associated with "
                       f"the given accession {geo_accession}. "
-                      f"Go to {NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and if possible, find "
+                      f"Go to {config.NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and if possible, find "
                       f"the related study accession, and run the tool with it.")
 
 
-NCBI_WEB_HOST=os.getenv('NCBI_WEB_HOST', default='https://www.ncbi.nlm.nih.gov')
+class TermNotFound(RuntimeError):
+    def __init__(self, term, error_key, db='sra'):
+        self.error_key = error_key
+        self.term = term
+        self.db = db
+
+    def __str__(self):
+        return f'Term {self.term} not found in {self.db}. ' \
+               f'Esearch error: {self.error_key}. ' \
+               f'Check if this accession exists and is public at {config.EUTILS_HOST}/sra?term={self.term}'

@@ -11,23 +11,33 @@ from tests.table_comparator import assert_equal_ordered
 
 
 class CharacteristicTest(unittest.TestCase):
+    output_dir = 'output'
+    expected_dir = 'tests/data/expected'
     accession_list = [
+        # 'GSE104276',
         # 'GSE121611',
         # 'GSE122960',
+        'GSE132509',
+        'GSE134174',
         # 'GSE138669',
+        'GSE144236',
+        'GSE144239',
+        'GSE144240',
         # 'GSE147482',
         # 'GSE147944',
-        'GSE151091',
-        'GSE156456',
+        # 'GSE151091',
+        # 'GSE156456',
+        'GSE162122',
+        # 'GSE163530',
+        'GSE167597',
+        'GSE171668',
         'GSE192721',
         'GSE195719',
         'GSE202210',
-        'GSE202601',
-        'GSE205642',
-        'GSE97168',
+        # 'GSE202601',
+        # 'GSE205642',
+        # 'GSE97168',
     ]
-    output_dir = 'output'
-    expected_dir = 'tests/data/expected'
 
     def test_no_runtime_errors(self):
         for accession in self.accession_list:
@@ -45,20 +55,21 @@ class CharacteristicTest(unittest.TestCase):
         try:
             self.run_geo_to_hca(accession, output_dir)
         except Exception as e:
-            self.fail(f"geo_to_hca failed for accession {accession} {e}")
+            self.fail(f"geo_to_hca failed for accession {accession} {str(e)}")
 
     def run_geo_to_hca(self, accession, output_dir):
-        testargs = ['geo_to_hca.py',
+        cli_args = ['geo_to_hca.py',
                     '--accession', accession,
                     '--output_dir', output_dir]
-        with patch.object(sys, 'argv', testargs):
-            with patch.dict(os.environ, {"IS_INTERACTIVE": "false"}):
+        with patch.object(sys, 'argv', cli_args):
+            env_vars = {"IS_INTERACTIVE": "false", "DEBUG": "true"}
+            with patch.dict(os.environ, env_vars):
                 try:
                     geo_to_hca.main()
                 except AssertionError as e:
-                    self.fail(f'assertion error: {e}')
+                    self.fail(f'accession {accession}: assertion error: {e}')
                 except Exception as e:
-                    self.fail(f'exception: {e}')
+                    self.fail(f'accession {accession}: exception: {e}')
 
     def check_output(self, accession, expected_dir, output_dir):
         expected_file = os.path.join(expected_dir, f'{accession}.xlsx')

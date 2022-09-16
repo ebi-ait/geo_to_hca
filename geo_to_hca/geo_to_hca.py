@@ -11,7 +11,7 @@ import pandas as pd
 from openpyxl import load_workbook, Workbook
 
 # --- application imports
-from geo_to_hca import version
+from geo_to_hca import version, config
 from geo_to_hca.utils import get_tab
 from geo_to_hca.utils import parse_reads
 from geo_to_hca.utils import sra_utils
@@ -238,8 +238,14 @@ def create_spreadsheet_using_accessions(accession_list, output_dir: str, nthread
         save_spreadsheet_to_file(workbook, accession, output_dir)
 
 
-def prepare_logging():
-    logging.basicConfig(stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+def prepare_logging(level=None):
+    if not level:
+        if config.DEBUG:
+            level = logging.DEBUG
+    if not level:
+        level = logging.INFO
+
+    logging.basicConfig(stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s', level=level)
 
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
@@ -252,6 +258,7 @@ def prepare_logging():
 
 
 def main():
+    config.reload()
     prepare_logging()
     log.info(f'using {__package__}-{version}')
     """
@@ -297,6 +304,7 @@ def main():
         create_spreadsheet_using_accessions(accession_list, args.output_dir, args.nthreads, args.template)
     except Exception as e:
         log.exception(e)
+        raise RuntimeError from e
 
 
 if __name__ == "__main__":
