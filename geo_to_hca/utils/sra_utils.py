@@ -98,7 +98,11 @@ def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
                                  retmode="text",
                                  mode='prepare')
     log.debug(f'srp_metadata url: {efetch_request.url}')
-    return pd.read_csv(efetch_request.url)
+    srp_metadata = pd.read_csv(efetch_request.url)
+    if 'Run' not in srp_metadata.columns:
+        raise RuntimeError(f'cannot build the srp_metadata from {efetch_request.url}: '
+                           f'invalid response from efetch form {srp_accession}: missing Run column\n content: {srp_metadata}')
+    return srp_metadata
 
 
 def parse_xml_SRA_runs(xml_content: object) -> object:
@@ -130,8 +134,10 @@ def request_accession_info(accessions: [], accession_type: str) -> object:
     """
     if accession_type == 'biosample':
         db = f'biosample'
-    if accession_type == 'experiment':
+    elif accession_type == 'experiment':
         db = f'sra'
+    else:
+        raise ValueError(f'unsupported accession_type: {accession_type}')
     sra_url = call_efetch(db, accessions)
     return xm.fromstring(sra_url.content)
 

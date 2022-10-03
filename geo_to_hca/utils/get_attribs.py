@@ -1,18 +1,17 @@
 # --- core imports
 import logging
-import os
 import xml.etree.ElementTree as xm
 
 # --- third-party imports
 import requests as rq
 
 # ---application imports
+from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
 
 """
 Define constants.
 """
-IS_INTERACTIVE = os.getenv('IS_INTERACTIVE', default='true') == 'true'
 STATUS_ERROR_CODE = 400
 
 log = logging.getLogger(__name__)
@@ -212,7 +211,7 @@ def search_europepmc_for_publication(project_title, key):
                     if not journal_title or journal_title == '':
                         log.info(f"no publication results for {key} in ENA")
                     else:
-                        if IS_INTERACTIVE:
+                        if config.IS_INTERACTIVE:
                             answer = input(f"A publication title has been found: {journal_title}.\n"
                                            f"Is this the publication title associated with the GEO accession? [y/n]: ")
                             if answer.lower() in ['y', "yes"]:
