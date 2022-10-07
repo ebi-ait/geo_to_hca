@@ -6,7 +6,7 @@ from geo_to_hca import version
 HERE = pathlib.Path(__file__).parent
 
 README = (HERE / "README.md").read_text()
-install_requires = [line.rstrip() for line in (HERE / "requirements.txt").read_text().splitlines()]
+install_requires = [line.rstrip() for line in (HERE / "requirements.in").read_text().splitlines()]
 
 setup(
     name="geo-to-hca",
@@ -18,7 +18,7 @@ setup(
     author="Ami Day, Alegria Aclan, Enrique Sapena Ventura, Wei Kheng Teh, Amnon Khen",
     author_email="ami@ebi.ac.uk, aaclan@ebi.ac.uk, enrique@ebi.ac.uk, wteh@ebi.ac.uk, amnon@ebi.ac.uk",
     classifiers=[
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.10",
         "License :: OSI Approved :: Apache Software License",
     ],
     packages=find_packages(exclude=["tests", "tests.*"]),
