@@ -1,5 +1,3 @@
-contextlib2
 openpyxl
 pandas
-pyyaml
 requests
