@@ -1,2 +1,2 @@
 include template/*.xlsx
-include requirements.txt
+include requirements.in requirements.txt
