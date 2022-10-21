@@ -6,6 +6,7 @@ import xml.etree.ElementTree as xm
 import requests as rq
 
 # ---application imports
+from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
 
 """
@@ -133,7 +134,11 @@ def get_attributes_library_protocol(experiment_package: object) -> []:
         library_descriptors = experiment.find('LIBRARY_DESCRIPTOR')
         if library_descriptors:
             desc = library_descriptors.find('LIBRARY_CONSTRUCTION_PROTOCOL')
-            library_construction_protocol = desc.text
+            if desc and hasattr(desc, 'text'):
+                library_construction_protocol = desc.text
+            else:
+                library_construction_protocol = ''
+
         else:
             library_construction_protocol = ''
         illumina = experiment.find('ILLUMINA')
@@ -146,119 +151,75 @@ def get_attributes_library_protocol(experiment_package: object) -> []:
 
 def get_attributes_bioproject(xml_content: object, bioproject_accession: str) -> [str,str,str,str]:
     bioproject_metadata = xml_content.find('DocumentSummary')
+    project_metadata = bioproject_metadata.find("Project")
+    project_description = project_metadata.find('ProjectDescr')
+    log.info('searching project metadata')
     try:
-        project_name = bioproject_metadata.find("Project").find('ProjectDescr').find('Name').text
+        project_name = project_description.find('Name').text
     except:
         log.info("no project name")
         project_name = None
     try:
-        project_title = bioproject_metadata.find("Project").find('ProjectDescr').find('Title').text
+        project_title = project_description.find('Title').text
     except:
         log.info("no project title")
         project_title = None
     try:
-        project_description = bioproject_metadata.find("Project").find('ProjectDescr').find('Description').text
+        project_description = project_description.find('Description').text
     except:
         project_description = ''
         log.info("no project description")
-    project_publication = bioproject_metadata.find("Project").find('ProjectDescr').find('Publication')
+    project_publication = project_description.find('Publication')
+    project_pubmed_id = ''
     try:
         if project_publication.find('DbType').text == 'Pubmed' or project_publication.find('DbType').text == 'ePubmed':
             project_pubmed_id = project_publication.find('Reference').text
     except:
         log.info("No publication for project %s was found: searching project title in EuropePMC" % (bioproject_accession))
-    if not project_publication or not project_pubmed_id:
-        if project_title:
-            log.info("project title is: %s" % (project_title))
-            url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
-            if url.status_code == STATUS_ERROR_CODE:
-                raise handle_errors.NotFoundENA(url, project_title)
-            else:
-                xml_content = xm.fromstring(url.content)
-                try:
-                    results = list()
-                    result_list = xml_content.find("resultList")
-                    for result in result_list:
-                        results.append(result)
-                    journal_title = results[0].find("journalTitle").text
+    if not project_pubmed_id:
+        project_pubmed_id = search_europepmc_for_publication(project_title, key='project_title')
+    if not project_pubmed_id:
+        project_pubmed_id = search_europepmc_for_publication(project_name, key='project_name')
+    if not project_pubmed_id or project_pubmed_id == '':
+        project_title = ''
+        project_name = ''
+        project_pubmed_id = ''
+    return project_name, project_title, project_description, project_pubmed_id
+
+
+def search_europepmc_for_publication(project_title, key):
+    log.info('searching europepmc for publication')
+    project_pubmed_id = ''
+    if project_title:
+        log.info(f"{key} is: {project_title}")
+        url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search',
+                     params={
+                         "query": project_title
+                     })
+        # the purpose here is to find the publication (pmid) when no citation is available
+        # in geo.
+        # Enrique's process is to serach for the matching titles from EuroPMC
+        # in google and if the text is available look for the geo accession
+        if url.status_code == STATUS_ERROR_CODE:
+            raise handle_errors.NotFoundENA(url, project_title)
+        else:
+            xml_content = xm.fromstring(url.content)
+            try:
+                result_list = xml_content.find("resultList")
+                for result in result_list:
+                    journal_title = result.find("journalTitle").text
                     if not journal_title or journal_title == '':
-                        project_pubmed_id = ''
-                        log.info("no publication results for project title in ENA")
+                        log.info(f"no publication results for {key} in ENA")
                     else:
-                        answer = input("A publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
-                        if answer.lower() in ['y',"yes"]:
-                            project_pubmed_id = results[0].find("pmid").text
+                        if config.IS_INTERACTIVE:
+                            answer = input(f"A publication title has been found: {journal_title}.\n"
+                                           f"Is this the publication title associated with the GEO accession? [y/n]: ")
+                            if answer.lower() in ['y', "yes"]:
+                                project_pubmed_id = result.find("pmid").text
+                                break
                         else:
-                            journal_title = results[1].find("journalTitle").text
-                            if not journal_title or journal_title == '':
-                                project_pubmed_id = ''
-                                log.info("no publication results for project title in ENA")
-                            else:
-                                answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
-                                if answer.lower() in ['y', "yes"]:
-                                    project_pubmed_id = results[1].find("pmid").text
-                                else:
-                                    journal_title = results[2].find("journalTitle").text
-                                    if not journal_title or journal_title == '':
-                                        project_pubmed_id = ''
-                                        log.info("no publication results for project title in ENA")
-                                    else:
-                                        answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
-                                        if answer.lower() in ['y', "yes"]:
-                                            project_pubmed_id = results[2].find("pmid").text
-                                        else:
-                                            project_pubmed_id = ''
-                                            log.info("no publication results for project title in ENA")
-                except:
-                    log.info("no publication results for project title in ENA")
-                    project_pubmed_id = ''
-        if not project_pubmed_id or project_pubmed_id == '':
-            if project_name:
-                log.info("project name is %s:" % (project_name))
-                url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
-                if url.status_code == STATUS_ERROR_CODE:
-                    raise handle_errors.NotFoundENA(url, project_name)
-                else:
-                    xml_content = xm.fromstring(url.content)
-                    try:
-                        results = list()
-                        result_list = xml_content.find("resultList")
-                        for result in result_list:
-                            results.append(result)
-                        journal_title = results[0].find("journalTitle").text
-                        if not journal_title or journal_title == '':
-                            project_pubmed_id = ''
-                            log.info("no publication results for project name in ENA")
-                        else:
-                            answer = input("A publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
-                            if answer.lower() in ['y',"yes"]:
-                                project_pubmed_id = results[0].find("pmid").text
-                            else:
-                                journal_title = results[1].find("journalTitle").text
-                                if not journal_title or journal_title == '':
-                                    project_pubmed_id = ''
-                                    log.info("no publication results for project name in ENA")
-                                else:
-                                    answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
-                                    if answer.lower() in ['y', "yes"]:
-                                        project_pubmed_id = results[1].find("pmid").text
-                                    else:
-                                        journal_title = results[2].find("journalTitle").text
-                                        if not journal_title or journal_title == '':
-                                            project_pubmed_id = ''
-                                            log.info("no publication results for project name in ENA")
-                                        else:
-                                            answer = input("An alternative publication title has been found: %s.\nIs this the publication title associated with the GEO accession? [y/n]: " % (journal_title))
-                                            if answer.lower() in ['y', "yes"]:
-                                                project_pubmed_id = results[2].find("pmid").text
-                                            else:
-                                                project_pubmed_id = ''
-                                                log.info("no publication results for project name in ENA")
-                    except:
-                        log.info("no publication results for project name in ENA")
-                        project_pubmed_id = ''
-        if not project_pubmed_id or project_pubmed_id == '':
-            project_title = ''
-            project_name = ''
-            project_pubmed_id = ''
-    return project_name,project_title,project_description,project_pubmed_id
+                            project_pubmed_id = result.find("pmid").text
+                            break
+            except:
+                log.warning(f"no publication results for {key} in ENA")
+    return project_pubmed_id

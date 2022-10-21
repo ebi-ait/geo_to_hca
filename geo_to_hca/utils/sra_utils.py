@@ -1,25 +1,25 @@
 # --- core imports
+import logging
 import re
 import xml.etree.ElementTree as xm
-from time import sleep
 
 import pandas as pd
-import requests
-import requests as rq
 
 # ---application imports
-from geo_to_hca.utils import handle_errors
 
 # --- third-party imports
+from geo_to_hca.utils.entrez_client import call_esearch, call_esummary, get_entrez_esearch, call_efetch
+from geo_to_hca.utils.handle_errors import no_related_study_err
 
 """
 Define constants.
 """
-STATUS_ERROR_CODE = 400
 
 """
 Functions to handle requests from NCBI SRA database or NCBI eutils.
 """
+
+log = logging.getLogger(__name__)
 
 
 def get_srp_accession_from_geo(geo_accession: str) -> [str]:
@@ -31,27 +31,58 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
         raise AssertionError(f'{geo_accession} is not a valid GEO accession')
 
     try:
-        default_params = {
-            'db': 'gds',
-            'retmode': 'json'
-        }
+        response_json = call_esearch(geo_accession, db='gds')
 
-        r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi',
-                         params={**default_params, 'term': geo_accession})
-        r.raise_for_status()
+        for summary_id in response_json['idlist']:
+            related_study = find_related_object(summary_id, accession_type='SRP')
+            if related_study:
+                return related_study
 
-        for summary_id in r.json()['esearchresult']['idlist']:
-            sleep(0.5)  # Have to sleep so don't cause 429 error. Limit is 3/second
-            r = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi',
-                             params={**default_params, 'id': summary_id})
-            r.raise_for_status()
-
-            results = [x for x in r.json()['result'].values() if type(x) is dict]
-            extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
-            return [x['targetobject'] for x in extrelations if 'SRP' in x.get('targetobject', '')]
+            # NOTE: this is a bit too complex, requires some cleanup
+            for sample in find_related_samples(summary_id):
+                sample_esearch_result = call_esearch(sample['accession'], db='gds')
+                for sample_id in sample_esearch_result['idlist']:
+                    experiment_accession = find_related_object(sample_id, accession_type='SRX')
+                    if experiment_accession:
+                        log.debug(f'sample {sample["accession"]} is linked to experiment {experiment_accession}')
+                        related_study = find_study_by_experiment_accession(experiment_accession)
+                        if related_study:
+                            return related_study
+        raise no_related_study_err(geo_accession)
 
     except Exception as e:
-        raise Exception(f'Failed to get SRP accessions: {e}')
+        raise Exception(f'Failed to get SRP accessions for GEO accession {geo_accession}: {e}')
+
+
+def find_study_by_experiment_accession(experiment_accession):
+    # search for accession in sra db using esearch
+    experiment_esearch_result = call_esearch(experiment_accession, db='sra')
+    # call esummary on sra db with the given id
+    experiment_id = experiment_esearch_result['idlist'][0]
+    experiment_esummary_result = call_esummary(experiment_id, db='sra')
+    # read xml from expxml attribute
+    experiment_xml = xm.fromstring(f"<experiment>{experiment_esummary_result['result'][experiment_id]['expxml']}</experiment>")
+    related_study = experiment_xml.find('Study').attrib['acc']
+    return related_study
+
+
+def find_related_samples(accession):
+    esummary_response_json = call_esummary(accession)
+    results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
+    return results[0]['samples']
+
+
+def find_related_object(accession, accession_type):
+    esummary_response_json = call_esummary(accession, db='gds')
+    results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
+    extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
+
+    related_objects = [relation['targetobject'] for relation in extrelations if accession_type in relation.get('targetobject', '')]
+    if not related_objects:
+        return None
+    if len(related_objects) > 1:
+        raise ValueError(f"More than a single related object has been found associated with accession {accession}")
+    return related_objects[0]
 
 
 def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
@@ -59,9 +90,19 @@ def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
     Function to retrieve a dataframe with multiple lists of experimental and sample accessions
     associated with a particular SRA study accession from the SRA database.
     """
-    sleep(0.5)
-    srp_metadata_url = f'http://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term={srp_accession}'
-    return pd.read_csv(srp_metadata_url)
+    esearch_result = get_entrez_esearch(srp_accession)
+    efetch_request = call_efetch(db="sra",
+                                 query_key=esearch_result['querykey'],
+                                 webenv=esearch_result['webenv'],
+                                 rettype="runinfo",
+                                 retmode="text",
+                                 mode='prepare')
+    log.debug(f'srp_metadata url: {efetch_request.url}')
+    srp_metadata = pd.read_csv(efetch_request.url)
+    if 'Run' not in srp_metadata.columns:
+        raise RuntimeError(f'cannot build the srp_metadata from {efetch_request.url}: '
+                           f'invalid response from efetch form {srp_accession}: missing Run column\n content: {srp_metadata}')
+    return srp_metadata
 
 
 def parse_xml_SRA_runs(xml_content: object) -> object:
@@ -74,11 +115,11 @@ def request_fastq_from_SRA(srr_accessions: []) -> object:
     Function to retrieve an xml file containing information associated with a list of NCBI SRA run accessions.
     In particular, the xml contains the paths to the data (if available) in fastq or other format.
     """
-    sleep(0.5)
-    url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(srr_accessions)}'
-    srr_metadata_url = rq.get(url)
-    if srr_metadata_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(srr_metadata_url, srr_accessions)
+    esearch_result = get_entrez_esearch(",".join(srr_accessions))
+    srr_metadata_url = call_efetch(db='sra',
+                                   accessions=srr_accessions,
+                                   webenv=esearch_result['webenv'],
+                                   query_key=esearch_result['querykey'])
     try:
         xml_content = xm.fromstring(srr_metadata_url.content)
     except:
@@ -92,34 +133,12 @@ def request_accession_info(accessions: [], accession_type: str) -> object:
     given list of biosample or experiment accessions. The xml contains various metadata fields.
     """
     if accession_type == 'biosample':
-        url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=biosample&id={",".join(accessions)}'
-    if accession_type == 'experiment':
-        url = f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=sra&id={",".join(accessions)}'
-    sra_url = rq.get(url)
-    if sra_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(sra_url, accessions)
+        db = f'biosample'
+    elif accession_type == 'experiment':
+        db = f'sra'
+    else:
+        raise ValueError(f'unsupported accession_type: {accession_type}')
+    sra_url = call_efetch(db, accessions)
     return xm.fromstring(sra_url.content)
 
 
-def request_bioproject_metadata(bioproject_accession: str):
-    """
-    Function to request metadata at the project level given an SRA Bioproject accession.
-    """
-    sleep(0.5)
-    srp_bioproject_url = rq.get(
-        f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=bioproject&id={bioproject_accession}')
-    if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(srp_bioproject_url, bioproject_accession)
-    return xm.fromstring(srp_bioproject_url.content)
-
-
-def request_pubmed_metadata(project_pubmed_id: str):
-    """
-    Function to request metadata at the publication level given a pubmed ID.
-    """
-    sleep(0.5)
-    pubmed_url = rq.get(
-        f'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
-    if pubmed_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(pubmed_url, project_pubmed_id)
-    return xm.fromstring(pubmed_url.content)

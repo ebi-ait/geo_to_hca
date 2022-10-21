@@ -1,3 +1,6 @@
-import logging
-from logging import NullHandler
-logging.getLogger(__name__).addHandler(NullHandler())
+import os
+
+version = '1.0.21'
+from .config import Config
+
+config = Config(os.environ)

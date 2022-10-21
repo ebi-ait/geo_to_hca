@@ -33,6 +33,7 @@ def request_fastq_from_ENA(srp_accession: str) -> {}:
         fastq_map = {run_accessions[i]: extract_reads_ENA(ftps[i]) for i in range(0, len(run_accessions))}
         return fastq_map
     except Exception as e:
+        log.error(f'no ena file report for accession {srp_accession}. url: {file_report_url}')
         log.exception(e)
         return None
 
