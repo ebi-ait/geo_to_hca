@@ -87,6 +87,7 @@ def call_efetch(db, accessions=[],
     params= {
         'db': db,
     }
+    accessions_string = ''
     if accessions:
         accessions_string = ",".join(accessions)
     if webenv:
@@ -107,9 +108,15 @@ def call_efetch(db, accessions=[],
             raise handle_errors.NotFoundSRA(efetch_response, accessions)
         return efetch_response
     elif mode == 'prepare':
-        return Request(method='GET',
+        if len(accessions_string) <= 200:
+            params['id'] = accessions_string
+            return Request(method='GET',
                        url=f'{config.EUTILS_BASE_URL}/efetch.fcgi',
                        params=params).prepare()
+        else:
+            return Request(method='POST',
+                           url=f'{config.EUTILS_BASE_URL}/efetch.fcgi',
+                           params=params, data=f'id={accessions_string}').prepare()
     else:
         raise ValueError(f'unsupported call mode for efetch: {mode}')
 
