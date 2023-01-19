@@ -87,9 +87,8 @@ def call_efetch(db, accessions=[],
     params= {
         'db': db,
     }
-    accessions_string = ''
-    if accessions:
-        accessions_string = ",".join(accessions)
+
+    accessions_string = ",".join(accessions)
     if webenv:
         params['WebEnv'] = webenv
     if query_key:
@@ -100,8 +99,9 @@ def call_efetch(db, accessions=[],
         params['retmode'] = retmode
     if mode == 'call':
         if len(accessions_string) <= 200:
+            if accessions_string:
                 params['id'] = accessions_string
-                efetch_response = requests.get(url, params=params)
+            efetch_response = requests.get(url, params=params)
         else:
             efetch_response = requests.post(url, params=params, data=f"id={accessions_string}")
         if efetch_response.status_code == STATUS_ERROR_CODE:
@@ -109,12 +109,12 @@ def call_efetch(db, accessions=[],
         return efetch_response
     elif mode == 'prepare':
         if len(accessions_string) <= 200:
-            params['id'] = accessions_string
+            if accessions_string:
+                params['id'] = accessions_string
             return Request(method='GET',
                        url=f'{config.EUTILS_BASE_URL}/efetch.fcgi',
                        params=params).prepare()
-        else:
-            return Request(method='POST',
+        return Request(method='POST',
                            url=f'{config.EUTILS_BASE_URL}/efetch.fcgi',
                            params=params, data=f'id={accessions_string}').prepare()
     else:
