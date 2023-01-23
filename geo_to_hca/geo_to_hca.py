@@ -47,14 +47,14 @@ def integrate_metadata(srp_metadata: pd.DataFrame, fastq_map: {}, cols: []) -> p
     fastq file names which are stored in the input fastq_map dictionary. It uses the run accessions
     (dictionary keys) to map the fastq file names to the study metadata accessions in the dataframe.
     """
-    srp_metadata_update = pd.DataFrame()
+    srp_metadata_update = []
     for _, row in srp_metadata.iterrows():
         srr_accession = row['Run']
         if not fastq_map or srr_accession not in fastq_map.keys():
             new_row = row.to_list()
             new_row.extend(['', '', ''])
             a_series = pd.Series(new_row)
-            srp_metadata_update = srp_metadata_update.append(a_series, ignore_index=True)
+            srp_metadata_update.append(a_series)
         else:
             filenames_list = fastq_map[srr_accession]
             for file in filenames_list:
@@ -67,10 +67,11 @@ def integrate_metadata(srp_metadata: pd.DataFrame, fastq_map: {}, cols: []) -> p
                 new_row = row.to_list()
                 new_row.extend([file, parse_reads.get_file_index(file), lane_index])
                 a_series = pd.Series(new_row)
-                srp_metadata_update = srp_metadata_update.append(a_series, ignore_index=True)
+                srp_metadata_update.append(a_series)
     cols.extend(['fastq_name', 'file_index', 'lane_index'])
-    srp_metadata_update.columns = cols
-    return srp_metadata_update
+    srp_metadata_with_file_fields = pd.DataFrame(srp_metadata_update)
+    srp_metadata_with_file_fields.columns = cols
+    return srp_metadata_with_file_fields
 
 
 def save_spreadsheet_to_file(workbook: Workbook, accession: str, output_dir: str):
