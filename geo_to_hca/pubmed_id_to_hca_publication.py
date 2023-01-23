@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.cell import get_column_letter
 
 from geo_to_hca.utils.entrez_client import call_efetch
-from geo_to_hca.utils.handle_errors import NotFoundENA
+from geo_to_hca.utils.handle_errors import NotFoundInENAException
 
 STATUS_ERROR_CODE = 400
 
@@ -67,7 +67,7 @@ def fetch_bioproject(bioproject_accession: str):
             print("project title is: %s" % (project_title))
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
             if url.status_code == STATUS_ERROR_CODE:
-                raise NotFoundENA(url, project_title)
+                raise NotFoundInENAException(url, project_title)
             else:
                 xml_content = xm.fromstring(url.content)
                 try:
@@ -112,7 +112,7 @@ def fetch_bioproject(bioproject_accession: str):
                 print("project name is %s:" % (project_name))
                 url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
                 if url.status_code == STATUS_ERROR_CODE:
-                    raise NotFoundENA(url, project_name)
+                    raise NotFoundInENAException(url, project_name)
                 else:
                     xml_content = xm.fromstring(url.content)
                     try:
@@ -176,7 +176,7 @@ def fetch_pubmed(project_pubmed_id: str,iteration: int):
         try:
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
             if url.status_code == STATUS_ERROR_CODE:
-                raise NotFoundENA(url, title)
+                raise NotFoundInENAException(url, title)
             else:
                 xml_content_2 = xm.fromstring(url.content)
             try:

@@ -295,7 +295,7 @@ def get_project_main_tab_xls(srp_metadata_update: pd.DataFrame,workbook: object,
         tab = utils.get_empty_df(workbook,tab_name)
         bioproject = list(set(list(srp_metadata_update['BioProject'])))
         if len(bioproject) > 1:
-            log.info("more than 1 bioproject, check this")
+            log.warning("more than 1 bioproject, check this")
         else:
             bioproject = bioproject[0]
         project_name,project_title,project_description,project_pubmed_id = utils.get_bioproject_metadata(bioproject)

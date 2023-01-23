@@ -8,7 +8,7 @@ import requests as rq
 
 from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
-from geo_to_hca.utils.handle_errors import TermNotFound
+from geo_to_hca.utils.handle_errors import TermNotFoundException
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ def check_esearch_result(db, term, esearch_result):
         return
     for error_key, errors in esearch_result['errorlist'].items():
         if len(errors) > 0:
-            raise TermNotFound(term, error_key, db)
+            raise TermNotFoundException(term, error_key, db)
     # validation passed
 
 
@@ -97,7 +97,7 @@ def call_efetch(db, accessions=[],
     if mode == 'call':
         efetch_response = rq.get(url, params=params)
         if efetch_response.status_code == STATUS_ERROR_CODE:
-            raise handle_errors.NotFoundSRA(efetch_response, accessions)
+            raise handle_errors.NotFoundInSRAException(efetch_response, accessions)
         return efetch_response
     elif mode == 'prepare':
         return Request(method='GET',
@@ -115,8 +115,18 @@ def request_bioproject_metadata(bioproject_accession: str):
     srp_bioproject_url = rq.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=bioproject&id={bioproject_accession}')
     if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(srp_bioproject_url, bioproject_accession)
-    return xm.fromstring(srp_bioproject_url.content)
+        raise handle_errors.NotFoundInSRAException(srp_bioproject_url, bioproject_accession)
+    efetch_response_xml = xm.fromstring(srp_bioproject_url.content)
+    check_efetch_response(accession=bioproject_accession,
+                          efetch_response_xml=efetch_response_xml,
+                          srp_bioproject_url=srp_bioproject_url)
+    return efetch_response_xml
+
+
+def check_efetch_response(accession, efetch_response_xml, srp_bioproject_url):
+    if efetch_response_xml.find('.//Error') is not None:
+        raise handle_errors.NotFoundInSRAException(response=srp_bioproject_url,
+                                                   accession_list=[accession])
 
 
 def request_pubmed_metadata(project_pubmed_id: str):
@@ -127,7 +137,7 @@ def request_pubmed_metadata(project_pubmed_id: str):
     pubmed_url = rq.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
     if pubmed_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(pubmed_url, project_pubmed_id)
+        raise handle_errors.NotFoundInSRAException(pubmed_url, project_pubmed_id)
     return xm.fromstring(pubmed_url.content)
 
 

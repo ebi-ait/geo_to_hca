@@ -3,7 +3,7 @@ import xml.etree.ElementTree as xm
 from geo_to_hca import config
 
 
-class NotFoundSRA(Exception):
+class NotFoundInSRAException(Exception):
     """
     Sub-class for Exception to handle 400 error status codes.
     """
@@ -14,19 +14,25 @@ class NotFoundSRA(Exception):
 
     def parse_xml_error(self):
         root = xm.fromstring(self.response.content)
-        return root.find('ERROR').text  # Return the string for the error returned by Efetch
-
+        if root.find('ERROR') is not None:
+            return root.find('ERROR').text
+        elif root.find('.//error') is not None:
+            return root.find('.//error').text  # Return the string for the error returned by Efetch
+        elif root.find('.//Error') is not None:
+            return root.find('.//Error').text  # Return the string for the error returned by Efetch
+        else:
+            return 'error n/a'
     def __str__(self):
         if len(self.accessions) > 1:
             accession_string = '\n'.join(self.accessions)
         else:
             accession_string = self.accessions
         return (f"\nStatus code of the request: {self.response.status_code}.\n"
-                f"Error as returned by SRA:\n{self.error}"
+                f"Error as returned by SRA:\n{self.error}\n"
                 f"The provided accessions were:\n{accession_string}\n\n")
 
 
-class NotFoundENA(Exception):
+class NotFoundInENAException(Exception):
     """
     Sub-class for Exception to handle 400 error status codes.
     """
@@ -52,7 +58,7 @@ def no_related_study_err(geo_accession):
                       f"the related study accession, and run the tool with it.")
 
 
-class TermNotFound(RuntimeError):
+class TermNotFoundException(RuntimeError):
     def __init__(self, term, error_key, db='sra'):
         self.error_key = error_key
         self.term = term

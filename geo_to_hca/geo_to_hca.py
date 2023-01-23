@@ -114,7 +114,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
             srp_accession = accession
 
         if not srp_accession:
-            raise Exception(f"No SRA study accession is available")
+            raise ValueError(f"No SRA study accession is available")
 
         """
         Fetch the SRA study metadata for the srp accession.
@@ -203,7 +203,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
             get_tab.get_project_publication_tab_xls(workbook, tab_name="Project - Publications",
                                                     project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            log.info(f'Publication attribute error with accession {accession}')
+            log.warning(f'Publication attribute error with accession {accession}')
 
         try:
             """
@@ -212,7 +212,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
             get_tab.get_project_contributors_tab_xls(workbook, tab_name="Project - Contributors",
                                                      project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            log.info(f'Contributors attribute error with accession {accession}')
+            log.warning(f'Contributors attribute error with accession {accession}')
 
         try:
             """
@@ -221,7 +221,7 @@ def create_spreadsheet_using_accession(accession, nthreads=1, hca_template=DEFAU
             get_tab.get_project_funders_tab_xls(workbook, tab_name="Project - Funders",
                                                 project_pubmed_id=project_pubmed_id)
         except AttributeError:
-            log.info(f'Funders attribute error with accession {accession}')
+            log.warning(f'Funders attribute error with accession {accession}')
         return workbook
     except Exception as e:
         raise Exception(f'Error creating spreadsheet for accession {accession}. {e}') from e

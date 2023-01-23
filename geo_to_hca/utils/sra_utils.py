@@ -8,7 +8,8 @@ import pandas as pd
 # ---application imports
 
 # --- third-party imports
-from geo_to_hca.utils.entrez_client import call_esearch, call_esummary, get_entrez_esearch, call_efetch
+from geo_to_hca.utils.entrez_client import call_esearch, call_esummary, get_entrez_esearch, call_efetch, \
+    check_efetch_response
 from geo_to_hca.utils.handle_errors import no_related_study_err
 
 """
@@ -28,7 +29,7 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
     """
     regex = re.compile('^GSE.*$')
     if not regex.match(geo_accession):
-        raise AssertionError(f'{geo_accession} is not a valid GEO accession')
+        raise ValueError(f'{geo_accession} is not a valid GEO accession')
 
     try:
         response_json = call_esearch(geo_accession, db='gds')
@@ -101,8 +102,7 @@ def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
     srp_metadata = pd.read_csv(efetch_request.url)
     if 'Run' not in srp_metadata.columns:
         raise RuntimeError(f'cannot build the srp_metadata from {efetch_request.url}: '
-                           f'invalid response from efetch form {srp_accession}: missing Run column\n content: {srp_metadata}')
-    return srp_metadata
+                           f'invalid response from efetch for accession {srp_accession}: missing column: {column}\n content: {srp_metadata}')
 
 
 def parse_xml_SRA_runs(xml_content: object) -> object:
@@ -124,6 +124,9 @@ def request_fastq_from_SRA(srr_accessions: []) -> object:
         xml_content = xm.fromstring(srr_metadata_url.content)
     except:
         xml_content = None
+    check_efetch_response(accession=srr_accessions,
+                          efetch_response_xml=xml_content,
+                          srp_bioproject_url=srr_metadata_url)
     return xml_content
 
 
@@ -139,6 +142,9 @@ def request_accession_info(accessions: [], accession_type: str) -> object:
     else:
         raise ValueError(f'unsupported accession_type: {accession_type}')
     sra_url = call_efetch(db, accessions)
-    return xm.fromstring(sra_url.content)
+    try:
+        return xm.fromstring(sra_url.content)
+    except:
+        raise ValueError(f'cannot parse xml for accessions list {accessions}')
 
 
