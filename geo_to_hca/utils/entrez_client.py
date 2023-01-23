@@ -23,13 +23,13 @@ def throttle():
     sleep(0.6)
 
 
-def call_esearch(geo_accession, db='gds'):
+def call_esearch(term, db='gds'):
     throttle()
     r = requests.get(f'{config.EUTILS_BASE_URL}/esearch.fcgi',
                      params={
                          'db': db,
                          'retmode': 'json',
-                         'term': geo_accession})
+                         'term': term})
     r.raise_for_status()
     response_json = r.json()
     return response_json['esearchresult']

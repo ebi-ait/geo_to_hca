@@ -35,15 +35,15 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
         response_json = call_esearch(geo_accession, db='gds')
 
         for summary_id in response_json['idlist']:
-            related_study = find_related_object(summary_id, accession_type='SRP')
+            related_study = find_related_object(accession=summary_id, accession_type='SRP')
             if related_study:
                 return related_study
-
+            log.info(f'looking at related samples to {summary_id}')
             # NOTE: this is a bit too complex, requires some cleanup
             for sample in find_related_samples(summary_id):
-                sample_esearch_result = call_esearch(sample['accession'], db='gds')
+                sample_esearch_result = call_esearch(term=sample['accession'], db='gds')
                 for sample_id in sample_esearch_result['idlist']:
-                    experiment_accession = find_related_object(sample_id, accession_type='SRX')
+                    experiment_accession = find_related_object(accession=sample_id, accession_type='SRX')
                     if experiment_accession:
                         log.debug(f'sample {sample["accession"]} is linked to experiment {experiment_accession}')
                         related_study = find_study_by_experiment_accession(experiment_accession)
@@ -56,6 +56,7 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
 
 
 def find_study_by_experiment_accession(experiment_accession):
+    log.info(f'finding study by experiment accession {experiment_accession}')
     # search for accession in sra db using esearch
     experiment_esearch_result = call_esearch(experiment_accession, db='sra')
     # call esummary on sra db with the given id
@@ -74,11 +75,14 @@ def find_related_samples(accession):
 
 
 def find_related_object(accession, accession_type):
+    log.info(f'finding related objects to accession {accession} of type {accession_type}')
     esummary_response_json = call_esummary(accession, db='gds')
     results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
     extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
 
-    related_objects = [relation['targetobject'] for relation in extrelations if accession_type in relation.get('targetobject', '')]
+    related_objects = [relation['targetobject']
+                       for relation in extrelations
+                       if accession_type in relation.get('targetobject', '')]
     if not related_objects:
         return None
     if len(related_objects) > 1:
@@ -96,11 +100,17 @@ def get_srp_metadata(srp_accession: str) -> pd.DataFrame:
                                  query_key=esearch_result['querykey'],
                                  webenv=esearch_result['webenv'],
                                  rettype="runinfo",
-                                 retmode="text",
-                                 mode='prepare')
+                                 retmode="text")
     log.debug(f'srp_metadata url: {efetch_request.url}')
-    srp_metadata = pd.read_csv(efetch_request.url)
-    if 'Run' not in srp_metadata.columns:
+    log.debug(f'srp_metadata encoding: {efetch_request.encoding}')
+    srp_metadata = pd.read_csv(BytesIO(efetch_request.content), encoding=efetch_request.encoding)
+    validate_srp_metadata(efetch_request, srp_accession, srp_metadata)
+    return srp_metadata
+
+
+def validate_srp_metadata(efetch_request, srp_accession, srp_metadata):
+    column = 'Run'
+    if column not in srp_metadata.columns:
         raise RuntimeError(f'cannot build the srp_metadata from {efetch_request.url}: '
                            f'invalid response from efetch for accession {srp_accession}: missing column: {column}\n content: {srp_metadata}')
 
