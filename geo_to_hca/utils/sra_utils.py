@@ -2,6 +2,8 @@
 import logging
 import re
 import xml.etree.ElementTree as xm
+from functools import lru_cache
+from io import BytesIO
 
 import pandas as pd
 
@@ -74,6 +76,7 @@ def find_related_samples(accession):
     return results[0]['samples']
 
 
+@lru_cache(maxsize=100)
 def find_related_object(accession, accession_type):
     log.info(f'finding related objects to accession {accession} of type {accession_type}')
     esummary_response_json = call_esummary(accession, db='gds')
