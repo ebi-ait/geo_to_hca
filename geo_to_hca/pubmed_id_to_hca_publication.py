@@ -13,6 +13,7 @@ from geo_to_hca.utils.handle_errors import NotFoundInENAException
 
 STATUS_ERROR_CODE = 400
 
+
 class SraUtils:
 
     @staticmethod
@@ -65,7 +66,7 @@ def fetch_bioproject(bioproject_accession: str):
     if not project_publication or not project_pubmed_id:
         if project_title:
             print("project title is: %s" % (project_title))
-            url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
+            url = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_title}')
             if url.status_code == STATUS_ERROR_CODE:
                 raise NotFoundInENAException(url, project_title)
             else:
@@ -110,7 +111,7 @@ def fetch_bioproject(bioproject_accession: str):
         if not project_pubmed_id or project_pubmed_id == '':
             if project_name:
                 print("project name is %s:" % (project_name))
-                url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
+                url = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={project_name}')
                 if url.status_code == STATUS_ERROR_CODE:
                     raise NotFoundInENAException(url, project_name)
                 else:
@@ -174,7 +175,7 @@ def fetch_pubmed(project_pubmed_id: str,iteration: int):
         if iteration == 1:
             print("no authors found in SRA")
         try:
-            url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
+            url = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
             if url.status_code == STATUS_ERROR_CODE:
                 raise NotFoundInENAException(url, title)
             else:
