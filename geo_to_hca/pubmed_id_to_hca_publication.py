@@ -3,7 +3,7 @@ import os
 import xml.etree.ElementTree as xm
 
 import pandas as pd
-import requests as rq
+import requests
 from openpyxl import Workbook
 from openpyxl import load_workbook
 from openpyxl.utils.cell import get_column_letter

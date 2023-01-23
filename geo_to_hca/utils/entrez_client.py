@@ -1,10 +1,10 @@
 import logging
 from time import sleep
-from requests import Request
-from xml.etree import ElementTree as xm
 
 import requests
-import requests as rq
+import requests_cache
+from requests import Request
+from xml.etree import ElementTree as xm
 
 from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
@@ -12,6 +12,7 @@ from geo_to_hca.utils.handle_errors import TermNotFoundException
 
 log = logging.getLogger(__name__)
 
+requests_cache.install_cache(f'{__name__}.cache')
 
 def throttle():
     """
@@ -95,7 +96,7 @@ def call_efetch(db, accessions=[],
     if retmode:
         params['retmode'] = retmode
     if mode == 'call':
-        efetch_response = rq.get(url, params=params)
+        efetch_response = requests.get(url, params=params)
         if efetch_response.status_code == STATUS_ERROR_CODE:
             raise handle_errors.NotFoundInSRAException(efetch_response, accessions)
         return efetch_response
@@ -112,7 +113,7 @@ def request_bioproject_metadata(bioproject_accession: str):
     Function to request metadata at the project level given an SRA Bioproject accession.
     """
     throttle()
-    srp_bioproject_url = rq.get(
+    srp_bioproject_url = requests.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=bioproject&id={bioproject_accession}')
     if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundInSRAException(srp_bioproject_url, bioproject_accession)
@@ -134,7 +135,7 @@ def request_pubmed_metadata(project_pubmed_id: str):
     Function to request metadata at the publication level given a pubmed ID.
     """
     throttle()
-    pubmed_url = rq.get(
+    pubmed_url = requests.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
     if pubmed_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundInSRAException(pubmed_url, project_pubmed_id)

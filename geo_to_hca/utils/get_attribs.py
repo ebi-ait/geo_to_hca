@@ -1,9 +1,7 @@
 # --- core imports
 import logging
+import requests
 import xml.etree.ElementTree as xm
-
-# --- third-party imports
-import requests as rq
 
 # ---application imports
 from geo_to_hca import config
@@ -192,7 +190,7 @@ def search_europepmc_for_publication(project_title, key):
     project_pubmed_id = ''
     if project_title:
         log.info(f"{key} is: {project_title}")
-        url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search',
+        url = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search',
                      params={
                          "query": project_title
                      })
