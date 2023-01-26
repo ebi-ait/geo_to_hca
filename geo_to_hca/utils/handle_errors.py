@@ -31,6 +31,11 @@ class NotFoundInSRAException(Exception):
                 f"Error as returned by SRA:\n{self.error}\n"
                 f"The provided accessions were:\n{accession_string}\n\n")
 
+    @staticmethod
+    def check_efetch_response(efetch_response_xml):
+        err_elements = ['error', 'Error']
+        return [e.text for e in [efetch_response_xml.find(f'.//{e}') for e in err_elements] if e is not None]
+
 
 class NotFoundInENAException(Exception):
     """

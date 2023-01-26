@@ -8,7 +8,7 @@ from xml.etree import ElementTree as xm
 
 from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
-from geo_to_hca.utils.handle_errors import TermNotFoundException
+from geo_to_hca.utils.handle_errors import TermNotFoundException, NotFoundInSRAException
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ def request_bioproject_metadata(bioproject_accession: str):
 
 
 def check_efetch_response(accession, efetch_response_xml, srp_bioproject_url):
-    if efetch_response_xml.find('.//Error') is not None:
+    if NotFoundInSRAException.check_efetch_response(efetch_response_xml):
         raise handle_errors.NotFoundInSRAException(response=srp_bioproject_url,
                                                    accession_list=[accession])
 
@@ -139,7 +139,11 @@ def request_pubmed_metadata(project_pubmed_id: str):
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
     if pubmed_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundInSRAException(pubmed_url, project_pubmed_id)
-    return xm.fromstring(pubmed_url.content)
+    pubmed_xml = xm.fromstring(pubmed_url.content)
+    check_efetch_response(accession=project_pubmed_id,
+                          efetch_response_xml=pubmed_xml,
+                          srp_bioproject_url=pubmed_url)
+    return pubmed_xml
 
 
 STATUS_ERROR_CODE = 400
