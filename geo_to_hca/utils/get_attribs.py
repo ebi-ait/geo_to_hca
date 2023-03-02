@@ -150,28 +150,30 @@ def get_attributes_library_protocol(experiment_package: object) -> []:
 def get_attributes_bioproject(xml_content: object, bioproject_accession: str) -> [str,str,str,str]:
     bioproject_metadata = xml_content.find('DocumentSummary')
     project_metadata = bioproject_metadata.find("Project")
-    project_description = project_metadata.find('ProjectDescr')
+    project_description_element = project_metadata.find('ProjectDescr')
     log.info('searching project metadata')
     try:
-        project_name = project_description.find('Name').text
+        project_name = project_description_element.find('Name').text
     except:
         log.warning("no project name")
         project_name = None
     try:
-        project_title = project_description.find('Title').text
+        project_title = project_description_element.find('Title').text
     except:
         log.warning("no project title")
         project_title = None
     try:
-        project_description = project_description.find('Description').text
+        project_description = project_description_element.find('Description').text
     except:
         project_description = ''
         log.warning("no project description")
-    project_publication = project_description.find('Publication')
+    project_publication = project_description_element.find('Publication')
     project_pubmed_id = ''
     try:
         if project_publication.find('DbType').text == 'Pubmed' or project_publication.find('DbType').text == 'ePubmed':
             project_pubmed_id = project_publication.find('Reference').text
+            if not project_pubmed_id:
+                project_pubmed_id = project_publication.attrib['id']
     except:
         log.warning("No publication for project %s was found: searching project title in EuropePMC" % (bioproject_accession))
     if not project_pubmed_id:
