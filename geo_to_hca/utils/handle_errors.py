@@ -57,7 +57,7 @@ class NotFoundInENAException(Exception):
 
 
 def no_related_study_err(geo_accession):
-    return ValueError(f"Could not find an an object with accession type SRP associated with "
+    return NoStudyForGeoAccession(f"Could not find an an object with accession type SRP associated with "
                       f"the given accession {geo_accession}. "
                       f"Go to {config.NCBI_WEB_HOST}/geo/query/acc.cgi?acc={geo_accession} and if possible, find "
                       f"the related study accession, and run the tool with it.")
@@ -72,4 +72,7 @@ class TermNotFoundException(RuntimeError):
     def __str__(self):
         return f'Term {self.term} not found in {self.db}. ' \
                f'Esearch error: {self.error_key}. ' \
-               f'Check if this accession exists and is public at {config.EUTILS_HOST}/sra?term={self.term}'
+               f'Check if this accession exists and is public at {config.EUTILS_HOST}/{self.db}?term={self.term}'
+
+class NoStudyForGeoAccession(RuntimeError):
+    pass

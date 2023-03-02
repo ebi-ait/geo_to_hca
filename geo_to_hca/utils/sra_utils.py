@@ -35,26 +35,14 @@ def get_srp_accession_from_geo(geo_accession: str) -> [str]:
 
     try:
         response_json = call_esearch(geo_accession, db='gds')
-
         for summary_id in response_json['idlist']:
-            related_study = find_related_object(accession=summary_id, accession_type='SRP')
+            related_study = find_related_object(accession=summary_id, accession_type='SRP', parent_accession=geo_accession)
             if related_study:
                 return related_study
-            log.info(f'looking at related samples to {summary_id}')
-            # NOTE: this is a bit too complex, requires some cleanup
-            for sample in find_related_samples(summary_id):
-                sample_esearch_result = call_esearch(term=sample['accession'], db='gds')
-                for sample_id in sample_esearch_result['idlist']:
-                    experiment_accession = find_related_object(accession=sample_id, accession_type='SRX')
-                    if experiment_accession:
-                        log.debug(f'sample {sample["accession"]} is linked to experiment {experiment_accession}')
-                        related_study = find_study_by_experiment_accession(experiment_accession)
-                        if related_study:
-                            return related_study
         raise no_related_study_err(geo_accession)
 
     except Exception as e:
-        raise Exception(f'Failed to get SRP accessions for GEO accession {geo_accession}: {e}')
+        raise no_related_study_err(geo_accession) from e
 
 
 def find_study_by_experiment_accession(experiment_accession):
@@ -77,9 +65,11 @@ def find_related_samples(accession):
 
 
 @lru_cache(maxsize=100)
-def find_related_object(accession, accession_type):
+def find_related_object(accession, accession_type, parent_accession=None):
     log.info(f'finding related objects to accession {accession} of type {accession_type}')
     esummary_response_json = call_esummary(accession, db='gds')
+    if parent_accession and esummary_response_json['result'][accession]['accession'] != parent_accession:
+        return None
     results = [x for x in esummary_response_json['result'].values() if type(x) is dict]
     extrelations = [x for x in [x.get('extrelations') for x in results] for x in x]
 
@@ -135,7 +125,8 @@ def request_fastq_from_SRA(srr_accessions: []) -> object:
                                    query_key=esearch_result['querykey'])
     try:
         xml_content = xm.fromstring(srr_metadata_url.content)
-    except:
+    except Exception as e :
+        log.warning(f'problem for accessions {srr_accessions} parsing xml {srr_metadata_url.content}: {e}')
         xml_content = None
     check_efetch_response(accession=srr_accessions,
                           efetch_response_xml=xml_content,

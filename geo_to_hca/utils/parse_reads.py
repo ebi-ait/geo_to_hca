@@ -85,7 +85,7 @@ def get_file_names_from_SRA(experiment_package: object) -> {}:
                     read_values = attribute.find('VALUE').text
                     fastq_map = extract_reads_SRA(read_values,accession,fastq_map)
         except Exception as e:
-            log.warning(f'problem with run {run}')
+            log.warning(f'problem getting files. accession{accession} run {run}')
             continue
     return fastq_map
 

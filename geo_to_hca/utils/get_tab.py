@@ -62,22 +62,26 @@ def process_specimen_from_organism(biosample_attribute_list: [], srp_metadata_up
     """
     biosample_accession = biosample_attribute_list[0]
     biosample_metadata = srp_metadata_update.loc[srp_metadata_update['BioSample'] == biosample_accession]
+
     df = {}
-    try:
-        df = {'specimen_from_organism.biomaterial_core.biomaterial_id': biosample_accession,
-              'specimen_from_organism.biomaterial_core.biomaterial_name': biosample_attribute_list[1],
-              'specimen_from_organism.biomaterial_core.biomaterial_description': ','.join(biosample_attribute_list[2]),
-              'specimen_from_organism.biomaterial_core.ncbi_taxon_id': list(biosample_metadata['TaxID'])[0],
-              'specimen_from_organism.genus_species.text': list(biosample_metadata['ScientificName'])[0],
-              'specimen_from_organism.genus_species.ontology_label': list(biosample_metadata['ScientificName'])[0],
-              'specimen_from_organism.biomaterial_core.biosamples_accession': biosample_accession,
-              'specimen_from_organism.biomaterial_core.insdc_sample_accession': list(biosample_metadata['Sample'])[0],
-              'collection_protocol.protocol_core.protocol_id': '',
-              'process.insdc_experiment.insdc_experiment_accession': biosample_metadata['Experiment'].values.tolist()[
-                  0]}
-    except Exception as e:
-        err_msg = f'problem with biosample accession {biosample_accession}: {str(e)}'
-        log.warning(err_msg)
+    if len(biosample_metadata) > 0:
+        try:
+            df = {'specimen_from_organism.biomaterial_core.biomaterial_id': biosample_accession,
+                  'specimen_from_organism.biomaterial_core.biomaterial_name': biosample_attribute_list[1],
+                  'specimen_from_organism.biomaterial_core.biomaterial_description': ','.join(biosample_attribute_list[2]),
+                  'specimen_from_organism.biomaterial_core.ncbi_taxon_id': list(biosample_metadata['TaxID'])[0],
+                  'specimen_from_organism.genus_species.text': list(biosample_metadata['ScientificName'])[0],
+                  'specimen_from_organism.genus_species.ontology_label': list(biosample_metadata['ScientificName'])[0],
+                  'specimen_from_organism.biomaterial_core.biosamples_accession': biosample_accession,
+                  'specimen_from_organism.biomaterial_core.insdc_sample_accession': list(biosample_metadata['Sample'])[0],
+                  'collection_protocol.protocol_core.protocol_id': '',
+                  'process.insdc_experiment.insdc_experiment_accession': biosample_metadata['Experiment'].values.tolist()[
+                      0]}
+        except Exception as e:
+            err_msg = f'problem with biosample accession {biosample_accession}: {str(e)}'
+            log.warning(err_msg)
+    else:
+        log.warning(f'BioSample accession not found {biosample_accession} in srp_metadata')
     return df
 
 
