@@ -323,24 +323,6 @@ def empty_worksheet(worksheet):
         return False
     return True
 
-def delete_unused_worksheets(workbook: Workbook) -> None:
-    """
-    Delete unused sheets from the metadata spreadsheet and the linked protocols.
-
-    :param workbook: Workbook
-                     Workbook object containing the metadata spreadsheet being modified
-    :returns None
-    """
-
-    for worksheet_name in OPTIONAL_TABS:
-        current_worksheet = workbook[worksheet_name]
-        if current_worksheet and empty_worksheet(current_worksheet):
-            del workbook[worksheet_name]
-            if worksheet_name in LINKINGS:
-                for linked_sheet in LINKINGS[worksheet_name]:
-                    if empty_worksheet(workbook[linked_sheet]):
-                        del workbook[linked_sheet]
-
 def list_str(values):
     if "," not in values:
         raise argparse.ArgumentTypeError("Argument list not valid: comma separated list required")
