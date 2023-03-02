@@ -3,6 +3,7 @@ from itertools import product
 
 import pandas as pd
 from assertpy import soft_assertions, assert_that, soft_fail, fail
+from pandas._testing import assert_frame_equal
 
 
 def assert_equal_ordered(left: pd.DataFrame,
@@ -15,18 +16,17 @@ def assert_equal_ordered(left: pd.DataFrame,
         left_filtered = filter_columns(ignore_cols, left)
         right_filtered = filter_columns(ignore_cols, right)
 
-        for i in range(0, min(len(left), len(right))):
-            msg = f'diff in line {i}'
-            if description:
-                msg = f'{description} {msg}'
-            try:
-                assert_that(left_filtered.iloc[i].to_dict(),
-                            description=msg) \
-                    .is_equal_to(right_filtered.iloc[i].to_dict())
-            except Exception as e:
-                soft_fail(f'problem during {description}: comparing line {i} failed: {str(e)}')
         if len(left) != len(right):
             soft_fail(f'problem during {description}: different table length: {left_tag}: {len(left)}, {right_tag}: {len(right)}')
+        else:
+            for i in range(0, min(len(left), len(right))):
+                msg = f'diff in line {i}'
+                if description:
+                    msg = f'{description} {msg}'
+                try:
+                    assert_frame_equal(left_filtered.iloc[[i]], right_filtered.iloc[[i]])
+                except AssertionError as e:
+                    soft_fail(f'problem during {description}: comparing line {i} failed: {str(e)}')
 
 
 def filter_columns(ignore_cols, df):
