@@ -49,7 +49,8 @@ def extract_reads_ENA(ftp_path: str) -> []:
         read_files = []
     return read_files
 
-def extract_reads_SRA(read_values:str,accession:str,fastq_map:{}) -> {}:
+
+def extract_reads_SRA(read_values:str, accession:str, fastq_map:{}) -> {}:
     """
     Function to extract a list of fastq file names from a str containing multiple file paths associated
     with a single run accession.
@@ -83,7 +84,8 @@ def get_file_names_from_SRA(experiment_package: object) -> {}:
                 if attribute.find('TAG').text == 'options':
                     read_values = attribute.find('VALUE').text
                     fastq_map = extract_reads_SRA(read_values,accession,fastq_map)
-        except:
+        except Exception as e:
+            log.warning(f'problem getting files. accession{accession} run {run}')
             continue
     return fastq_map
 
@@ -94,15 +96,17 @@ def get_fastq_from_SRA(srr_accessions: []) -> {}:
     this xml and the file names are added to a dictionary with the associated run accessions as keys (fastq_map).
     """
     xml_content = sra_utils.request_fastq_from_SRA(srr_accessions)
-    if not xml_content:
-        fastq_map = None
-    else:
+    fastq_map = None
+    if xml_content:
         experiment_packages = sra_utils.parse_xml_SRA_runs(xml_content)
         for experiment_package in experiment_packages:
             try:
                 fastq_map = get_file_names_from_SRA(experiment_package)
             except:
+                log.warning(f'problem getting file names from SRA for experiment {experiment_package}')
                 continue
+        if fastq_map is None:
+            raise Exception(f'could not find file names in SRA for {srr_accessions}')
     return fastq_map
 
 def get_lane_index(file: str) -> str:

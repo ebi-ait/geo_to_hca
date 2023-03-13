@@ -179,10 +179,12 @@ def write_to_wb(workbook: Workbook, tab_name: str, tab_content: pd.DataFrame) ->
         else:
             break
 
-    for index, key in enumerate(worksheet[4]):
-        if not key.value:
+    ingest_variable_row = worksheet[4]
+    for index, key in enumerate(ingest_variable_row):
+        ingest_variable_name = key.value
+        if not ingest_variable_name:
             break
-        if key.value not in tab_content.keys():
+        if ingest_variable_name not in tab_content.keys():
             continue
-        for i in range(len(tab_content[key.value])):
-            worksheet[f"{get_column_letter(index + 1)}{i + row_not_filled}"] = list(tab_content[key.value])[i]
+        for i in range(len(tab_content[ingest_variable_name])):
+            worksheet[f"{get_column_letter(index + 1)}{i + row_not_filled}"] = list(tab_content[ingest_variable_name])[i]
