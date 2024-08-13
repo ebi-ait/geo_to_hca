@@ -5,7 +5,7 @@ Here are all the available templates using the latest [HCA metadata schema](http
 
 In order to deliver different biological networks needs, we also provide templates specific for each bionetwork with some fields that will be used exclusivly for the bionetwork.
 
-- [Lung template](hlca_template.xlsx)
+- [Lung template](hca_lung_template.xlsx)
 
 
 ## Additional fields in specific bionetworks:
