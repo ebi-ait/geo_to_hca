@@ -82,5 +82,11 @@ In order to deliver different biological networks needs, we also provide templat
 | `donor_organism.medical_tests.dlco_predicted_percent` | donor_organism.medical_tests | dlco_predicted_percent |
 | `donor_organism.medical_tests.kco` | donor_organism.medical_tests | kco |
 | `donor_organism.medical_tests.kco_predicted_percent` | donor_organism.medical_tests | kco_predicted_percent |
+| `donor_organism.disease_profile.copd_gold_stage` | donor_organism.disease_profile | copd_gold_stage |
+| `donor_organism.disease_profile.copd_mmrc_grade` | donor_organism.disease_profile | copd_mmrc_grade |
+| `donor_organism.disease_profile.copd_cat_score` | donor_organism.disease_profile | copd_cat_score |
+| `donor_organism.disease_profile.copd_gold_abe_assessment` | donor_organism.disease_profile | copd_gold_abe_assessment |
+| `donor_organism.disease_profile.copd_phenotype` | donor_organism.disease_profile | copd_phenotype |
+| `donor_organism.disease_profile.copd_emphysema_percentage` | donor_organism.disease_profile | copd_emphysema_percentage |
 
 </details>
