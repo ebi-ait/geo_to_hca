@@ -3,7 +3,7 @@
 Here are all the available templates using the latest [HCA metadata schema](https://github.com/HumanCellAtlas/metadata-schema/tree/master/json_schema). 
 - [HCA template](hca_template.xlsx)
 - [HCA template contributor](hca_template_contributor.xlsx)
-    A minimised version of the full [HCA template](hca_template.xlsx) that is focused on the most common experimental design (no cell_line/ organoid no spatial trascriptomics, see more detail in the section [Tabs in contributor version](#tabs-in-contributor-version)) 
+    A minimised version of the full [HCA template](hca_template.xlsx) that is focused on the most common experimental design (no cell_line/ organoid no spatial trascriptomics, see more detail in the section [Tabs in contributor version](#tabs-in-contributor-version)) and is thought to be shared with contributors who would like to submit their metadata.
 
 In order to deliver different biological networks needs, we also provide templates specific for each bionetwork with some fields that will be used exclusivly for the bionetwork.
 
