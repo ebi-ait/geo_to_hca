@@ -90,7 +90,3 @@ In order to deliver different biological networks needs, we also provide templat
 | `donor_organism.disease_profile.copd_emphysema_percentage` | donor_organism.disease_profile | copd_emphysema_percentage |
 
 </details>
-
-
-
-Note: as per 14-Oct-2024, an ontology update is pending for the last file schemas to be validating. For that reason, the most recent schemas that can be validated has been added to the Schema tab of the [HCA template](hca_template.xlsx) file.
