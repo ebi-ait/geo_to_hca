@@ -2,56 +2,12 @@
 
 Here are all the available templates using the latest [HCA metadata schema](https://github.com/HumanCellAtlas/metadata-schema/tree/master/json_schema). 
 - [HCA template](hca_template.xlsx)
-- [HCA template contributor](hca_template_contributor.xlsx)
-    A minimised version of the full [HCA template](hca_template.xlsx) that is focused on the most common experimental design (no cell_line/ organoid no spatial trascriptomics, see more detail in the section [Tabs in contributor version](#tabs-in-contributor-version)) and is thought to be shared with contributors who would like to submit their metadata.
+Some fields are only expected to be filled from specific bionetworks. Thus we have separately the template with the exstensive list of fields.
+- [Full template](hca_full_template.xlsx)
 
-In order to deliver different biological networks needs, we also provide templates specific for each bionetwork with some fields that will be used exclusivly for the bionetwork.
-
-- [Lung template](hca_lung_template.xlsx)
-
-
-## Tabs in contributor version
-<details><summary>HCA template contributor</summary>
-
-**Tabs kept**:
-	Project
-	/ Project - Contributors
-	/ Project - Publications
-	/ Project - Funders
-	/ Donor organism
-	/ Specimen from organism
-	/ Cell suspension
-	/ Supplementary file
-	/ Sequence file
-	/ Analysis file
-	/ Collection protocol
-	/ Dissociation protocol
-	/ Enrichment protocol
-	/ Library preparation protocol
-	/ Sequencing protocol
-	/ Analysis protocol
-
-**Tabs removed**
-:
-	~Organoid~
-	/ ~Cell line~
-	/ ~Imaged Specimen~
-	/ ~Image file~
-	/ ~Treatment protocol~
-	/ ~Differentiation protocol~
-	/ ~Aggregate generation protocol~
-	/ ~Ipsc induction protocol~
-	/ ~Imaging preparation protocol~
-	/ ~Imaging protocol~
-	/ ~Additional reagents~
-	/ ~Imaging protocol - Channel~
-	/ ~Imaging protocol - Probe~
-	/ ~Familial relationship~
-
-</details>
 
 ## Additional fields in specific bionetworks:
-<details><summary>Lung template</summary>
+<details><summary>Lung specific</summary>
 
 
 | Programmatic name | schema | field | 
