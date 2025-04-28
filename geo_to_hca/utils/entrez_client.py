@@ -4,7 +4,6 @@ from requests import Request
 from xml.etree import ElementTree as xm
 
 import requests
-import requests as rq
 
 from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
@@ -48,13 +47,17 @@ def call_esummary(accession, db='gds'):
 
 def get_entrez_esearch(term, db="sra"):
     throttle()
-    esearch_response = requests.get(url=f'{config.EUTILS_BASE_URL}/esearch.fcgi',
-                     params={
-                         "db": db,
-                         "term": term,
-                         "usehistory": "y",
-                         "format": "json",
-                     })
+    params={
+        "db": db,
+        "usehistory": "y",
+        "format": "json",
+    }
+    if len(term) <= 200:
+        params['term'] = term
+        esearch_response = requests.get(url=f'{config.EUTILS_BASE_URL}/esearch.fcgi', params=params)
+    else:
+        esearch_response = requests.post(url=f'{config.EUTILS_BASE_URL}/esearch.fcgi', params=params, data=f"term={term}")
+        
     log.debug(f'esearch url:  {esearch_response.url}')
     log.debug(f'esearch response status:  {esearch_response.status_code}')
     log.debug(f'esearch response content:  {esearch_response.text}')
@@ -84,8 +87,8 @@ def call_efetch(db, accessions=[],
     params= {
         'db': db,
     }
-    if accessions:
-        params['id'] = ",".join(accessions)
+
+    accessions_string = ",".join(accessions)
     if webenv:
         params['WebEnv'] = webenv
     if query_key:
@@ -95,14 +98,25 @@ def call_efetch(db, accessions=[],
     if retmode:
         params['retmode'] = retmode
     if mode == 'call':
-        efetch_response = rq.get(url, params=params)
+        if len(accessions_string) <= 200:
+            if accessions_string:
+                params['id'] = accessions_string
+            efetch_response = requests.get(url, params=params)
+        else:
+            efetch_response = requests.post(url, params=params, data=f"id={accessions_string}")
         if efetch_response.status_code == STATUS_ERROR_CODE:
             raise handle_errors.NotFoundSRA(efetch_response, accessions)
         return efetch_response
     elif mode == 'prepare':
-        return Request(method='GET',
+        if len(accessions_string) <= 200:
+            if accessions_string:
+                params['id'] = accessions_string
+            return Request(method='GET',
                        url=f'{config.EUTILS_BASE_URL}/efetch.fcgi',
                        params=params).prepare()
+        return Request(method='POST',
+                           url=f'{config.EUTILS_BASE_URL}/efetch.fcgi',
+                           params=params, data=f'id={accessions_string}').prepare()
     else:
         raise ValueError(f'unsupported call mode for efetch: {mode}')
 
@@ -112,7 +126,7 @@ def request_bioproject_metadata(bioproject_accession: str):
     Function to request metadata at the project level given an SRA Bioproject accession.
     """
     throttle()
-    srp_bioproject_url = rq.get(
+    srp_bioproject_url = requests.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=bioproject&id={bioproject_accession}')
     if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundSRA(srp_bioproject_url, bioproject_accession)
@@ -124,7 +138,7 @@ def request_pubmed_metadata(project_pubmed_id: str):
     Function to request metadata at the publication level given a pubmed ID.
     """
     throttle()
-    pubmed_url = rq.get(
+    pubmed_url = requests.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
     if pubmed_url.status_code == STATUS_ERROR_CODE:
         raise handle_errors.NotFoundSRA(pubmed_url, project_pubmed_id)
