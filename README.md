@@ -119,7 +119,7 @@ Requirements for this project are listed in 2 files: `requirements.txt` and `req
 The `requirements-dev.txt` file contains dependencies specific for development
 
 The requirement files (`requirements.txt`, `requirements-dev.txt`) are generated using `pip-compile` from [pip-tools](https://github.com/jazzband/pip-tools) 
-```
+```bash
 pip-compile requirements.in
 pip-compile requirements-dev.in
 ```
@@ -128,11 +128,11 @@ The direct dependencies are listed in `requirements.in`, `requirements-dev.in` i
 #### Install dependencies
 
 * by using `pip-sync` from `pip-tools`
-```
+```bash
 pip-sync requirements.txt requirements-dev.txt
 ```
 * or by just using `pip install` 
-```
+```bash
     pip install -r requirements.txt
     pip install -r requirements-dev.txt
 ```
