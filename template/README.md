@@ -1,9 +1,9 @@
 # HCA spreadsheet Templates
 
 Here are all the available templates using the latest [HCA metadata schema](https://github.com/HumanCellAtlas/metadata-schema/tree/master/json_schema). 
-- [HCA template](hca_template.xlsx)
-Some fields are only expected to be filled from specific bionetworks. Thus we have separately the template with the exstensive list of fields.
-- [Full template](hca_full_template.xlsx)
+- [HCA template](hca_template.xlsx) - comprises all fields developed before tier 2 + GDN, as a more light generic template
+- [Full template](hca_full_template.xlsx) - comprises all fields available in the latest [HCA metadata schema](https://github.com/HumanCellAtlas/metadata-schema/tree/master/json_schema). 
+- [Lung template](hca_lung_template.xlsx) - with lung tier 2 fields + GDN
 
 
 ## Additional fields in specific bionetworks:
@@ -46,3 +46,4 @@ Some fields are only expected to be filled from specific bionetworks. Thus we ha
 | `donor_organism.disease_profile.copd_emphysema_percentage` | donor_organism.disease_profile | copd_emphysema_percentage |
 
 </details>
+
