@@ -4,6 +4,7 @@ Here are all the available templates using the latest [HCA metadata schema](http
 - [HCA template](hca_template.xlsx) - comprises all fields developed before tier 2 + GDN, as a more light generic template
 - [Full template](hca_full_template.xlsx) - comprises all fields available in the latest [HCA metadata schema](https://github.com/HumanCellAtlas/metadata-schema/tree/master/json_schema). 
 - [Lung template](hca_lung_template.xlsx) - with lung tier 2 fields + GDN
+- [Gut template](hca_gut_template.xlsx) - with gut tier 2 fields + GDN
 
 
 ## Additional fields in specific bionetworks:
