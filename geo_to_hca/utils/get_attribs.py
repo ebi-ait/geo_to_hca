@@ -1,9 +1,7 @@
 # --- core imports
 import logging
+import requests
 import xml.etree.ElementTree as xm
-
-# --- third-party imports
-import requests as rq
 
 # ---application imports
 from geo_to_hca import config
@@ -34,7 +32,7 @@ def get_attributes_pubmed(xml_content: object,iteration: int) -> [str,[],[],str]
         try:
             url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={title}')
             if url.status_code == STATUS_ERROR_CODE:
-                raise handle_errors.NotFoundENA(url, title)
+                raise handle_errors.NotFoundInENAException(url, title)
             else:
                 xml_content_2 = xm.fromstring(url.content)
             try:
@@ -152,30 +150,32 @@ def get_attributes_library_protocol(experiment_package: object) -> []:
 def get_attributes_bioproject(xml_content: object, bioproject_accession: str) -> [str,str,str,str]:
     bioproject_metadata = xml_content.find('DocumentSummary')
     project_metadata = bioproject_metadata.find("Project")
-    project_description = project_metadata.find('ProjectDescr')
+    project_description_element = project_metadata.find('ProjectDescr')
     log.info('searching project metadata')
     try:
-        project_name = project_description.find('Name').text
+        project_name = project_description_element.find('Name').text
     except:
-        log.info("no project name")
+        log.warning("no project name")
         project_name = None
     try:
-        project_title = project_description.find('Title').text
+        project_title = project_description_element.find('Title').text
     except:
-        log.info("no project title")
+        log.warning("no project title")
         project_title = None
     try:
-        project_description = project_description.find('Description').text
+        project_description = project_description_element.find('Description').text
     except:
         project_description = ''
-        log.info("no project description")
-    project_publication = project_description.find('Publication')
+        log.warning("no project description")
+    project_publication = project_description_element.find('Publication')
     project_pubmed_id = ''
     try:
         if project_publication.find('DbType').text == 'Pubmed' or project_publication.find('DbType').text == 'ePubmed':
             project_pubmed_id = project_publication.find('Reference').text
+            if not project_pubmed_id:
+                project_pubmed_id = project_publication.attrib['id']
     except:
-        log.info("No publication for project %s was found: searching project title in EuropePMC" % (bioproject_accession))
+        log.warning("No publication for project %s was found: searching project title in EuropePMC" % (bioproject_accession))
     if not project_pubmed_id:
         project_pubmed_id = search_europepmc_for_publication(project_title, key='project_title')
     if not project_pubmed_id:
@@ -192,7 +192,7 @@ def search_europepmc_for_publication(project_title, key):
     project_pubmed_id = ''
     if project_title:
         log.info(f"{key} is: {project_title}")
-        url = rq.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search',
+        url = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search',
                      params={
                          "query": project_title
                      })
@@ -201,7 +201,7 @@ def search_europepmc_for_publication(project_title, key):
         # Enrique's process is to serach for the matching titles from EuroPMC
         # in google and if the text is available look for the geo accession
         if url.status_code == STATUS_ERROR_CODE:
-            raise handle_errors.NotFoundENA(url, project_title)
+            raise handle_errors.NotFoundInENAException(url, project_title)
         else:
             xml_content = xm.fromstring(url.content)
             try:

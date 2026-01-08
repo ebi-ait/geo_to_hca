@@ -1,17 +1,18 @@
 import logging
 from time import sleep
+
+import requests
+import requests_cache
 from requests import Request
 from xml.etree import ElementTree as xm
 
-import requests
-import requests as rq
-
 from geo_to_hca import config
 from geo_to_hca.utils import handle_errors
-from geo_to_hca.utils.handle_errors import TermNotFound
+from geo_to_hca.utils.handle_errors import TermNotFoundException, NotFoundInSRAException
 
 log = logging.getLogger(__name__)
 
+requests_cache.install_cache(f'{__name__}.cache')
 
 def throttle():
     """
@@ -23,13 +24,13 @@ def throttle():
     sleep(0.6)
 
 
-def call_esearch(geo_accession, db='gds'):
+def call_esearch(term, db='gds'):
     throttle()
     r = requests.get(f'{config.EUTILS_BASE_URL}/esearch.fcgi',
                      params={
                          'db': db,
                          'retmode': 'json',
-                         'term': geo_accession})
+                         'term': term})
     r.raise_for_status()
     response_json = r.json()
     return response_json['esearchresult']
@@ -70,7 +71,7 @@ def check_esearch_result(db, term, esearch_result):
         return
     for error_key, errors in esearch_result['errorlist'].items():
         if len(errors) > 0:
-            raise TermNotFound(term, error_key, db)
+            raise TermNotFoundException(term, error_key, db)
     # validation passed
 
 
@@ -95,9 +96,9 @@ def call_efetch(db, accessions=[],
     if retmode:
         params['retmode'] = retmode
     if mode == 'call':
-        efetch_response = rq.get(url, params=params)
+        efetch_response = requests.get(url, params=params)
         if efetch_response.status_code == STATUS_ERROR_CODE:
-            raise handle_errors.NotFoundSRA(efetch_response, accessions)
+            raise handle_errors.NotFoundInSRAException(efetch_response, accessions)
         return efetch_response
     elif mode == 'prepare':
         return Request(method='GET',
@@ -112,11 +113,21 @@ def request_bioproject_metadata(bioproject_accession: str):
     Function to request metadata at the project level given an SRA Bioproject accession.
     """
     throttle()
-    srp_bioproject_url = rq.get(
+    srp_bioproject_url = requests.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=bioproject&id={bioproject_accession}')
     if srp_bioproject_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(srp_bioproject_url, bioproject_accession)
-    return xm.fromstring(srp_bioproject_url.content)
+        raise handle_errors.NotFoundInSRAException(srp_bioproject_url, bioproject_accession)
+    efetch_response_xml = xm.fromstring(srp_bioproject_url.content)
+    check_efetch_response(accession=bioproject_accession,
+                          efetch_response_xml=efetch_response_xml,
+                          srp_bioproject_url=srp_bioproject_url)
+    return efetch_response_xml
+
+
+def check_efetch_response(accession, efetch_response_xml, srp_bioproject_url):
+    if NotFoundInSRAException.check_efetch_response(efetch_response_xml):
+        raise handle_errors.NotFoundInSRAException(response=srp_bioproject_url,
+                                                   accession_list=[accession])
 
 
 def request_pubmed_metadata(project_pubmed_id: str):
@@ -124,11 +135,15 @@ def request_pubmed_metadata(project_pubmed_id: str):
     Function to request metadata at the publication level given a pubmed ID.
     """
     throttle()
-    pubmed_url = rq.get(
+    pubmed_url = requests.get(
         f'{config.EUTILS_BASE_URL}/efetch/fcgi?db=pubmed&id={project_pubmed_id}&rettype=xml')
     if pubmed_url.status_code == STATUS_ERROR_CODE:
-        raise handle_errors.NotFoundSRA(pubmed_url, project_pubmed_id)
-    return xm.fromstring(pubmed_url.content)
+        raise handle_errors.NotFoundInSRAException(pubmed_url, project_pubmed_id)
+    pubmed_xml = xm.fromstring(pubmed_url.content)
+    check_efetch_response(accession=project_pubmed_id,
+                          efetch_response_xml=pubmed_xml,
+                          srp_bioproject_url=pubmed_url)
+    return pubmed_xml
 
 
 STATUS_ERROR_CODE = 400
